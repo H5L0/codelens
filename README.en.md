@@ -7,15 +7,15 @@ English | [简体中文](./README.md)
 ## Quick start
 
 ```bash
-npx codelens                 # analyze the current directory and open the browser
-npx codelens ../my-repo      # analyze another repository
-npx codelens --profile web   # split the calendar into frontend / backend
+npx @h5l0/codelens                 # analyze the current directory and open the browser
+npx @h5l0/codelens ../my-repo      # analyze another repository
+npx @h5l0/codelens --profile web   # split the calendar into frontend / backend
 ```
 
 Or install it globally:
 
 ```bash
-npm install -g codelens
+npm install -g @h5l0/codelens
 codelens
 ```
 

@@ -7,15 +7,15 @@
 ## 快速开始
 
 ```bash
-npx codelens                 # 统计当前目录并在浏览器打开
-npx codelens ../my-repo      # 统计指定仓库
-npx codelens --profile web   # 按前后端拆分改动日历
+npx @h5l0/codelens                 # 统计当前目录并在浏览器打开
+npx @h5l0/codelens ../my-repo      # 统计指定仓库
+npx @h5l0/codelens --profile web   # 按前后端拆分改动日历
 ```
 
 也可以全局安装后随时使用：
 
 ```bash
-npm install -g codelens
+npm install -g @h5l0/codelens
 codelens
 ```
 

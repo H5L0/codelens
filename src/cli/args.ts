@@ -147,8 +147,8 @@ ${row('-h, --help', 'Show help')}
 ${row('-v, --version', 'Show version')}
 
 Examples
-${row('npx codelens', 'analyze the current directory', EXAMPLE_COL)}
-${row('npx codelens ../my-repo', 'analyze another repository', EXAMPLE_COL)}
-${row('npx codelens --profile web', 'split the calendar into frontend / backend', EXAMPLE_COL)}
-${row('npx codelens --profile ./p.json', 'use a custom profile file', EXAMPLE_COL)}`;
+${row('npx @h5l0/codelens', 'analyze the current directory', EXAMPLE_COL)}
+${row('npx @h5l0/codelens ../my-repo', 'analyze another repository', EXAMPLE_COL)}
+${row('npx @h5l0/codelens --profile web', 'split the calendar into frontend / backend', EXAMPLE_COL)}
+${row('npx @h5l0/codelens --profile ./p.json', 'use a custom profile file', EXAMPLE_COL)}`;
 }

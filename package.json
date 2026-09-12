@@ -1,5 +1,5 @@
 {
-  "name": "codelens",
+  "name": "@h5l0/codelens",
   "version": "0.1.0",
   "description": "把任意 git 仓库的改动历史与代码行数可视化成本地看板 | Local dashboard for a git repository's commit history and lines of code",
   "keywords": [
@@ -13,6 +13,9 @@
   ],
   "type": "module",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/H5L0/codelens.git"

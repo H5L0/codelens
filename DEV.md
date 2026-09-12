@@ -102,7 +102,7 @@ npm run dev -- ../some-repo --profile web
 
 ## 发布
 
-发布到公共 npm，包名为 `codelens`（不带作用域）。`prepublishOnly` 会依次跑 `typecheck`、`test` 与 `build`，任一失败都发不出去；CI（`.github/workflows/ci.yml`）在 node 20 与 22、ubuntu 与 windows 上跑同一套命令。
+发布到公共 npm，包名为 `@h5l0/codelens`（个人作用域；不带作用域的 `codelens` 会被 npm 以「与 code-lens 过于相似」拒绝；作用域包默认私有，所以 `publishConfig.access` 固定为 `public`）。`prepublishOnly` 会依次跑 `typecheck`、`test` 与 `build`，任一失败都发不出去；CI（`.github/workflows/ci.yml`）在 node 20 与 22、ubuntu 与 windows 上跑同一套命令。
 
 ```bash
 npm version patch        # 或 minor / major
