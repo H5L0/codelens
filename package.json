@@ -1,0 +1,51 @@
+{
+  "name": "codelens",
+  "version": "0.1.0",
+  "description": "把任意 git 仓库的改动历史与代码行数可视化成本地看板 | Local dashboard for a git repository's commit history and lines of code",
+  "keywords": [
+    "git",
+    "treemap",
+    "calendar",
+    "code-stats",
+    "lines-of-code",
+    "visualization",
+    "cli"
+  ],
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "codelens": "dist/cli/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "dev": "tsx src/cli/index.ts --dev",
+    "build": "npm run build:web && npm run build:cli",
+    "build:web": "vite build",
+    "build:cli": "tsc -p tsconfig.cli.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.cli.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.13",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.1.2",
+    "happy-dom": "^20.14.3",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vitest": "^5.0.0"
+  }
+}
