@@ -6,7 +6,7 @@
 // 内置项的 label 是英文，labelKey 供页面按语言覆盖；用户配置的 label 原样使用。
 // ---------------------------------------------------------------------------
 import { readFileSync, statSync } from 'node:fs';
-import { isAbsolute, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { CategoryDef, Profile } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -114,6 +114,11 @@ const PROFILE_WEB: ProfileEntry = {
 };
 
 const BUILTIN_PROFILES: Record<string, ProfileEntry> = { all: PROFILE_ALL, web: PROFILE_WEB };
+
+/** 保留 id：all 是聚合键，其余几个会撞上对象的原型属性。 */
+const RESERVED_IDS = new Set(['all', '__proto__', 'prototype', 'constructor']);
+
+const hasOwn = (obj: object, key: string): boolean => Object.hasOwn(obj, key);
 
 // ---------------------------------------------------------------------------
 // 配置校验
@@ -244,19 +249,81 @@ function parseEntry(value: unknown, where: string): ProfileEntry {
 }
 
 function readJson(path: string): unknown {
+  let text: string;
   try {
-    return JSON.parse(readFileSync(path, 'utf8'));
+    text = readFileSync(path, 'utf8');
   } catch (err) {
     throw new Error(`failed to read config file ${path}: ${err instanceof Error ? err.message : String(err)}`);
   }
+  try {
+    // 配置里允许写注释与尾随逗号，README 的示例就是这么给的
+    return JSON.parse(stripJsonc(text));
+  } catch (err) {
+    throw new Error(`failed to parse config file ${path}: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
-export interface ResolvedProfile extends Profile {
+/**
+ * 去掉 jsonc 的注释与尾随逗号：字符串、注释、逗号在同一趟里处理，
+ * 字符串里的 `//`、`/*` 与拖尾的 `,` 都原样保留。
+ */
+function stripJsonc(text: string): string {
+  let out = '';
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === '"') {
+      out += ch;
+      i += 1;
+      while (i < text.length) {
+        const inner = text[i];
+        out += inner;
+        i += 1;
+        if (inner === '\\') {
+          out += text[i] ?? '';
+          i += 1;
+        } else if (inner === '"') {
+          break;
+        }
+      }
+      continue;
+    }
+    if (ch === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') {
+        i += 1;
+      }
+      continue;
+    }
+    if (ch === '/' && text[i + 1] === '*') {
+      i += 2;
+      while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) {
+        i += 1;
+      }
+      i += 2;
+      continue;
+    }
+    if (ch === ',') {
+      let j = i + 1;
+      while (j < text.length && /\s/.test(text[j])) {
+        j += 1;
+      }
+      if (text[j] === '}' || text[j] === ']') {
+        i += 1;
+        continue;
+      }
+    }
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
+interface ResolvedProfile extends Profile {
   /** 配置文件路径，未使用配置文件时为 undefined。 */
   configPath: string | undefined;
 }
 
-export interface LoadProfileOptions {
+interface LoadProfileOptions {
   root: string;
   name: string;
   /** 显式指定的配置文件路径。 */
@@ -286,12 +353,17 @@ export function loadProfile(opts: LoadProfileOptions): ResolvedProfile {
   } else if (opts.configPath || exists(configPath)) {
     const file = asObject(readJson(configPath), configPath);
     const profiles = file.profiles === undefined ? {} : asObject(file.profiles, `profiles of ${configPath}`);
-    if (profiles[name] === undefined) {
+    if (hasOwn(profiles, name)) {
+      entry = parseEntry(profiles[name], `profiles.${name} of ${configPath}`);
+      usedConfig = configPath;
+    } else if (hasOwn(BUILTIN_PROFILES, name)) {
+      // 配置里没有这一档就回退内置档：仓库里放了一份自定义配置，
+      // 不该让默认的 `codelens` / `--profile web` 直接跑不起来
+      entry = BUILTIN_PROFILES[name];
+    } else {
       fail(configPath, `has no profile named ${name}; available: ${names(profiles, BUILTIN_PROFILES)}`);
     }
-    entry = parseEntry(profiles[name], `profiles.${name} of ${configPath}`);
-    usedConfig = configPath;
-  } else if (BUILTIN_PROFILES[name]) {
+  } else if (hasOwn(BUILTIN_PROFILES, name)) {
     entry = BUILTIN_PROFILES[name];
   } else {
     throw new Error(`no profile named ${name}; available: ${names(undefined, BUILTIN_PROFILES)}`);
@@ -303,10 +375,15 @@ export function loadProfile(opts: LoadProfileOptions): ResolvedProfile {
     if (ids.has(group.id)) {
       fail(`groups of ${usedConfig ?? name}`, `contain a duplicate id: ${group.id}`);
     }
+    if (RESERVED_IDS.has(group.id)) {
+      fail(`groups of ${usedConfig ?? name}`, `must not use the reserved id: ${group.id}`);
+    }
     ids.add(group.id);
   }
-  if (ids.has('all')) {
-    fail(`groups of ${usedConfig ?? name}`, 'must not use the reserved id: all');
+  for (const category of entry.categories ?? []) {
+    if (RESERVED_IDS.has(category.id)) {
+      fail(`categories of ${usedConfig ?? name}`, `must not use the reserved id: ${category.id}`);
+    }
   }
 
   return {
@@ -338,9 +415,4 @@ function exists(path: string): boolean {
 /** 供帮助信息使用：列出内置配置档。 */
 export function builtinProfileNames(): string[] {
   return Object.keys(BUILTIN_PROFILES);
-}
-
-/** 把相对路径转成绝对路径，供 CLI 统一处理。 */
-export function absolute(path: string, base: string): string {
-  return isAbsolute(path) ? path : resolve(base, path);
 }

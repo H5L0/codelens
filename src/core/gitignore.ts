@@ -6,14 +6,15 @@
 // ---------------------------------------------------------------------------
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { globToRegExp } from './glob.js';
+import { createGlob } from './glob.js';
+import type { GlobMatcher } from './glob.js';
 
 export interface IgnoreRule {
   /** 规则所在目录，相对仓库根，根目录为空串。 */
   base: string;
   negate: boolean;
   dirOnly: boolean;
-  re: RegExp;
+  test: GlobMatcher;
 }
 
 function parseLine(raw: string, base: string): IgnoreRule | undefined {
@@ -33,13 +34,11 @@ function parseLine(raw: string, base: string): IgnoreRule | undefined {
   if (pattern === '') {
     return undefined;
   }
-  // 开头的 `/` 表示从所在目录起算
-  const anchored = pattern.startsWith('/');
-  const body = anchored ? pattern.slice(1) : pattern;
-  if (body === '') {
+  // 开头的 `/` 由 createGlob 解释为从所在目录起算，这里原样传下去
+  if (pattern === '') {
     return undefined;
   }
-  return { base, negate, dirOnly, re: globToRegExp(body, base, anchored) };
+  return { base, negate, dirOnly, test: createGlob(pattern, base) };
 }
 
 /** 解析一段 .gitignore 文本，base 为该文件所在目录。 */
@@ -70,7 +69,7 @@ export function isIgnored(relPath: string, isDir: boolean, rules: readonly Ignor
     if (rule.dirOnly && !isDir) {
       continue;
     }
-    if (rule.re.test(relPath)) {
+    if (rule.test(relPath)) {
       return !rule.negate;
     }
   }

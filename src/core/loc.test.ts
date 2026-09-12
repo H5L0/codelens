@@ -2,17 +2,18 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, describe, expect, test } from 'vitest';
-import { buildLoc, categorize } from './loc.js';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { buildLoc } from './loc.js';
+import { firstMatch } from './glob.js';
 import { DEFAULT_CATEGORIES } from './profile.js';
 import { listFiles } from './scan.js';
-import type { Profile } from './types.js';
+import type { LocData, Profile } from './types.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'codelens-loc-'));
 const PROFILE: Profile = { name: 'all', label: '全部', groups: [], categories: DEFAULT_CATEGORIES, ignore: [] };
 
-const write = (rel: string, content: string): void => {
-  const abs = join(dir, rel);
+const write = (rel: string, content: string, base = dir): void => {
+  const abs = join(base, rel);
   mkdirSync(join(abs, '..'), { recursive: true });
   writeFileSync(abs, content);
 };
@@ -31,7 +32,7 @@ execFileSync('git', ['init', '-q'], { cwd: dir, stdio: 'ignore' });
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-describe('categorize', () => {
+describe('firstMatch', () => {
   const cases: Array<[string, string]> = [
     ['src/modules/a.ts', 'app'],
     ['src/modules/a.test.ts', 'test'],
@@ -56,27 +57,34 @@ describe('categorize', () => {
     ['data/templates/a.template.json', 'app'],
   ];
 
-  test.each(cases)('[categorize] %s 应该归入 %s', (path, expected) => {
-    expect(categorize(path, DEFAULT_CATEGORIES)).toBe(expected);
+  test.each(cases)('[firstMatch] %s 应该归入 %s', (path, expected) => {
+    expect(firstMatch(path, DEFAULT_CATEGORIES)).toBe(expected);
   });
 
-  test('[categorize] 前面的分类优先，兜底类最后生效', () => {
-    expect(categorize('scripts/a.test.ts', DEFAULT_CATEGORIES)).toBe('test');
-    expect(categorize('unknown/path.bin', DEFAULT_CATEGORIES)).toBe('app');
+  test('[firstMatch] 前面的分类优先，兜底类最后生效', () => {
+    expect(firstMatch('scripts/a.test.ts', DEFAULT_CATEGORIES)).toBe('test');
+    expect(firstMatch('unknown/path.bin', DEFAULT_CATEGORIES)).toBe('app');
   });
 
-  test('[categorize] 自定义分类应该覆盖默认规则', () => {
+  test('[firstMatch] 自定义分类应该覆盖默认规则', () => {
     const custom = [
       { id: 'translation', label: '翻译模块', hue: 1, sat: 1, match: ['src/modules/translation/**'] },
       { id: 'other', label: '其他', hue: 2, sat: 2 },
     ];
-    expect(categorize('src/modules/translation/a.ts', custom)).toBe('translation');
-    expect(categorize('src/modules/audit/a.ts', custom)).toBe('other');
+    expect(firstMatch('src/modules/translation/a.ts', custom)).toBe('translation');
+    expect(firstMatch('src/modules/audit/a.ts', custom)).toBe('other');
   });
 });
 
 describe('buildLoc', () => {
-  const { data, scan } = buildLoc(dir, PROFILE, { useGitignore: false });
+  let data: LocData;
+  let mode: string;
+
+  beforeAll(async () => {
+    const result = await buildLoc(dir, PROFILE, { useGitignore: false });
+    data = result.data;
+    mode = result.scan.mode;
+  });
 
   test('[buildLoc] 应该统计每个文件的物理行与非空行', () => {
     expect(data.files.find((file) => file.path === 'src/app.ts')).toEqual({
@@ -97,15 +105,15 @@ describe('buildLoc', () => {
   });
 
   test('[buildLoc] 汇总应该等于逐文件之和', () => {
-    const lines = data.files.reduce((sum, file) => sum + file.lines, 0);
-    expect(data.totals.lines).toBe(lines);
+    const total = data.files.reduce((sum, file) => sum + file.lines, 0);
+    expect(data.totals.lines).toBe(total);
     expect(data.totals.files).toBe(data.files.length);
     expect(data.totals.nonBlank).toBe(data.files.reduce((sum, file) => sum + file.nonBlank, 0));
   });
 
   test('[buildLoc] 关闭 gitignore 过滤时应该统计隐藏目录之外的全部文件', () => {
     expect(data.files.map((file) => file.path)).toContain('generated/skip.ts');
-    expect(scan.mode).toBe('walk');
+    expect(mode).toBe('walk');
   });
 
   test('[buildLoc] 应该带出分类定义与配置档名', () => {
@@ -119,18 +127,53 @@ describe('buildLoc', () => {
 
 describe('listFiles', () => {
   test('[listFiles] 有 git 时应该用索引并遵守 .gitignore', () => {
-    const { files, mode } = listFiles({ root: dir, ignore: [], useGitignore: true });
+    const { entries, mode } = listFiles({ root: dir, ignore: [], useGitignore: true });
+    const paths = entries.map((entry) => entry.path);
     expect(mode).toBe('git');
-    expect(files).toContain('src/app.ts');
-    expect(files).toContain('src/blob.txt');
-    expect(files).not.toContain('generated/skip.ts');
-    expect(files).toEqual([...files].sort());
+    expect(paths).toContain('src/app.ts');
+    expect(paths).toContain('src/blob.txt');
+    expect(paths).not.toContain('generated/skip.ts');
+    expect(paths).toEqual([...paths].sort());
+    // 大小随文件一起取回来，行数统计不必再 stat 一遍
+    expect(entries.find((entry) => entry.path === 'src/app.ts')?.size).toBe(Buffer.byteLength('a\nb\n\nc\n'));
   });
 
   test('[listFiles] 额外的忽略规则应该同时生效', () => {
-    const { files } = listFiles({ root: dir, ignore: ['src/**'], useGitignore: true });
-    expect(files).not.toContain('src/app.ts');
-    expect(files).toContain('scripts/tool.ts');
+    const paths = listFiles({ root: dir, ignore: ['src/**'], useGitignore: true }).entries.map((entry) => entry.path);
+    expect(paths).not.toContain('src/app.ts');
+    expect(paths).toContain('scripts/tool.ts');
+  });
+
+  test('[listFiles] 目录名不带斜杠也能排除整个目录', () => {
+    const plain = mkdtempSync(join(tmpdir(), 'codelens-dirrule-'));
+    try {
+      write('mydata/a.ts', 'x\n', plain);
+      write('mydata/nested/b.ts', 'x\n', plain);
+      write('src/c.ts', 'x\n', plain);
+      for (const rule of ['mydata', 'mydata/', '/mydata', 'mydata/**']) {
+        const paths = listFiles({ root: plain, ignore: [rule], useGitignore: false }).entries.map((entry) => entry.path);
+        expect(paths).toEqual(['src/c.ts']);
+      }
+      // 从根锚定的写法不该命中深层同名目录
+      write('src/mydata/d.ts', 'x\n', plain);
+      const anchored = listFiles({ root: plain, ignore: ['/mydata'], useGitignore: false }).entries.map((entry) => entry.path);
+      expect(anchored).toContain('src/mydata/d.ts');
+    } finally {
+      rmSync(plain, { recursive: true, force: true });
+    }
+  });
+
+  test('[listFiles] 文件名与内置重目录同名时应该保留', () => {
+    const plain = mkdtempSync(join(tmpdir(), 'codelens-named-'));
+    try {
+      write('build', 'x\n', plain);
+      write('dist/out.js', 'x\n', plain);
+      const paths = listFiles({ root: plain, ignore: [], useGitignore: false }).entries.map((entry) => entry.path);
+      expect(paths).toContain('build');
+      expect(paths).not.toContain('dist/out.js');
+    } finally {
+      rmSync(plain, { recursive: true, force: true });
+    }
   });
 
   test('[listFiles] 目录不是仓库时应该退回遍历并仍然遵守 .gitignore', () => {
@@ -144,24 +187,24 @@ describe('listFiles', () => {
     writeFileSync(join(plain, '.hidden', 'b.ts'), 'x\n');
     writeFileSync(join(plain, '.gitignore'), '*.log\n.hidden/\n');
     try {
-      const { files, mode } = listFiles({ root: plain, ignore: [], useGitignore: true });
+      const { entries, mode } = listFiles({ root: plain, ignore: [], useGitignore: true });
       expect(mode).toBe('walk');
-      expect(files).toEqual(['.gitignore', 'src/a.ts']);
+      expect(entries.map((entry) => entry.path)).toEqual(['.gitignore', 'src/a.ts']);
     } finally {
       rmSync(plain, { recursive: true, force: true });
     }
   });
 
-  test('[listFiles] 关闭 gitignore 时应该跳过隐藏目录', () => {
+  test('[listFiles] 关闭 gitignore 时只跳过内置重目录', () => {
     const plain = mkdtempSync(join(tmpdir(), 'codelens-nodot-'));
     mkdirSync(join(plain, '.hidden'), { recursive: true });
-    mkdirSync(join(plain, '.github'), { recursive: true });
+    mkdirSync(join(plain, 'node_modules'), { recursive: true });
     writeFileSync(join(plain, '.hidden', 'a.ts'), 'x\n');
-    writeFileSync(join(plain, '.github', 'ci.yml'), 'x\n');
+    writeFileSync(join(plain, 'node_modules', 'a.ts'), 'x\n');
     writeFileSync(join(plain, 'a.ts'), 'x\n');
     try {
-      const { files } = listFiles({ root: plain, ignore: [], useGitignore: false });
-      expect(files).toEqual(['.github/ci.yml', 'a.ts']);
+      const { entries } = listFiles({ root: plain, ignore: [], useGitignore: false });
+      expect(entries.map((entry) => entry.path)).toEqual(['.hidden/a.ts', 'a.ts']);
     } finally {
       rmSync(plain, { recursive: true, force: true });
     }
@@ -181,8 +224,8 @@ describe('listFiles', () => {
     run(['commit', '-q', '-m', 'init']);
     rmSync(join(repo, 'gone.ts'));
     try {
-      const { files } = listFiles({ root: repo, ignore: [], useGitignore: true });
-      expect(files).toEqual(['kept.ts']);
+      const { entries } = listFiles({ root: repo, ignore: [], useGitignore: true });
+      expect(entries.map((entry) => entry.path)).toEqual(['kept.ts']);
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }

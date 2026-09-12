@@ -75,6 +75,12 @@ export interface DayEntry {
   groups: Record<string, GroupStat>;
 }
 
+/** 日历上的一段日期区间，两端都是 YYYY-MM-DD。 */
+interface Range {
+  min: string;
+  max: string;
+}
+
 /** 改动日历数据（对应浏览器侧的 /api/data.json）。 */
 export interface CalendarData {
   generatedAt: string;
@@ -82,10 +88,12 @@ export interface CalendarData {
   profile: string;
   /** 实际启用的分组，空数组表示不区分前后端。 */
   groups: Array<Pick<GroupDef, 'id' | 'label' | 'labelKey' | 'hue' | 'sat'>>;
-  range: { min: string; max: string };
+  range: Range;
   totals: { days: number; groups: Record<string, GroupStat> };
   /** 单日改动行峰值，用于日历条宽度刻度。 */
   maxVal: number;
+  /** 单日提交数峰值，用日报表的备注。 */
+  maxCommits: number;
   days: Record<string, DayEntry>;
 }
 
@@ -104,7 +112,8 @@ export interface LocData {
   profile: string;
   categories: Array<Pick<CategoryDef, 'id' | 'label' | 'labelKey' | 'hue' | 'sat' | 'defaultOn'>>;
   totals: { files: number; lines: number; nonBlank: number };
-  skipped: { binary: number; large: number };
+  /** 被跳过的文件数：二进制、超大、读不出来的。 */
+  skipped: { binary: number; large: number; unreadable: number };
   files: LocFileEntry[];
 }
 

@@ -5,17 +5,30 @@ import { afterAll, describe, expect, test } from 'vitest';
 import { matchesAny } from './glob.js';
 import { DEFAULT_CATEGORIES, loadProfile } from './profile.js';
 
-const dir = mkdtempSync(join(tmpdir(), 'codelens-profile-'));
-const configPath = join(dir, 'codelens.config.json');
+const dirs: string[] = [];
 
-afterAll(() => rmSync(dir, { recursive: true, force: true }));
+/** 每个用例一个干净目录：配置文件在用例之间互相影响过。 */
+const freshDir = (): string => {
+  const dir = mkdtempSync(join(tmpdir(), 'codelens-profile-'));
+  dirs.push(dir);
+  return dir;
+};
 
-const writeConfig = (value: unknown): void => {
-  writeFileSync(configPath, JSON.stringify(value));
+afterAll(() => {
+  for (const dir of dirs) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+const writeConfig = (dir: string, value: unknown): string => {
+  const path = join(dir, 'codelens.config.json');
+  writeFileSync(path, typeof value === 'string' ? value : JSON.stringify(value));
+  return path;
 };
 
 describe('loadProfile', () => {
   test('[loadProfile] 内置 all 档应该不分组并使用默认分类', () => {
+    const dir = freshDir();
     const profile = loadProfile({ root: dir, name: 'all', exclude: [] });
     expect(profile.groups).toEqual([]);
     expect(profile.categories).toEqual(DEFAULT_CATEGORIES);
@@ -24,6 +37,7 @@ describe('loadProfile', () => {
   });
 
   test('[loadProfile] 内置 web 档应该把前端目录与其余部分分开', () => {
+    const dir = freshDir();
     const profile = loadProfile({ root: dir, name: 'web', exclude: [] });
     expect(profile.groups.map((group) => group.id)).toEqual(['frontend', 'backend']);
     const [frontend, backend] = profile.groups;
@@ -35,12 +49,14 @@ describe('loadProfile', () => {
   });
 
   test('[loadProfile] 未知档名应该提示可选项', () => {
+    const dir = freshDir();
     expect(() => loadProfile({ root: dir, name: 'nope', exclude: [] })).toThrow(/no profile named nope/);
     expect(() => loadProfile({ root: dir, name: 'nope', exclude: [] })).toThrow(/all/);
   });
 
   test('[loadProfile] 应该读取配置文件里的自定义档', () => {
-    writeConfig({
+    const dir = freshDir();
+    const configPath = writeConfig(dir, {
       profiles: {
         modules: {
           label: '按模块',
@@ -70,8 +86,51 @@ describe('loadProfile', () => {
     expect(profile.configPath).toBe(configPath);
   });
 
+  test('[loadProfile] 配置文件里没有内置档名时应该回退内置档', () => {
+    const dir = freshDir();
+    writeConfig(dir, { profiles: { modules: { label: '按模块', groups: [{ id: 'a', label: 'A', match: ['**'] }] } } });
+    // 仓库里放了一份自定义配置，默认的 all 与 --profile web 仍然要能用
+    const all = loadProfile({ root: dir, name: 'all', exclude: [] });
+    expect(all.groups).toEqual([]);
+    expect(all.label).toBe('All');
+    expect(all.configPath).toBeUndefined();
+    const web = loadProfile({ root: dir, name: 'web', exclude: [] });
+    expect(web.groups.map((group) => group.id)).toEqual(['frontend', 'backend']);
+    // 配置文件里确实有的档还是走配置
+    expect(loadProfile({ root: dir, name: 'modules', exclude: [] }).label).toBe('按模块');
+  });
+
+  test('[loadProfile] 配置文件支持注释与尾随逗号', () => {
+    const dir = freshDir();
+    writeConfig(
+      dir,
+      `{
+  // 行注释
+  "profiles": {
+    "commented": {
+      /* 块注释，注释里出现 // 也应该被忽略 */
+      "label": "带注释",
+      "groups": [
+        { "id": "a", "label": "A", "match": ["**"], },
+      ],
+    },
+  },
+}`,
+    );
+    const profile = loadProfile({ root: dir, name: 'commented', exclude: [] });
+    expect(profile.label).toBe('带注释');
+    expect(profile.groups).toHaveLength(1);
+  });
+
+  test('[loadProfile] 注释里的花括号与引号不应该影响解析', () => {
+    const dir = freshDir();
+    writeConfig(dir, '{ /* } " */ "profiles": { "odd": { "groups": [] } } }');
+    expect(loadProfile({ root: dir, name: 'odd', exclude: [] }).groups).toEqual([]);
+  });
+
   test('[loadProfile] 配置文件里的档缺省字段应该回落到默认分类', () => {
-    writeConfig({ profiles: { bare: {} } });
+    const dir = freshDir();
+    writeConfig(dir, { profiles: { bare: {} } });
     const profile = loadProfile({ root: dir, name: 'bare', exclude: [] });
     expect(profile.groups).toEqual([]);
     expect(profile.categories).toEqual(DEFAULT_CATEGORIES);
@@ -79,6 +138,7 @@ describe('loadProfile', () => {
   });
 
   test('[loadProfile] 应该支持把配置文件直接当档用', () => {
+    const dir = freshDir();
     writeFileSync(join(dir, 'my.json'), JSON.stringify({ label: '独立档', groups: [{ id: 'a', label: 'A', match: ['**'] }] }));
     const profile = loadProfile({ root: dir, name: 'my.json', exclude: [] });
     expect(profile.label).toBe('独立档');
@@ -86,32 +146,46 @@ describe('loadProfile', () => {
   });
 
   test('[loadProfile] 分组 id 重复或占用保留名应该报错', () => {
-    writeConfig({ profiles: { dup: { groups: [{ id: 'a', label: 'A', match: ['**'] }, { id: 'a', label: 'B', match: ['**'] }] } } });
+    const dir = freshDir();
+    writeConfig(dir, { profiles: { dup: { groups: [{ id: 'a', label: 'A', match: ['**'] }, { id: 'a', label: 'B', match: ['**'] }] } } });
     expect(() => loadProfile({ root: dir, name: 'dup', exclude: [] })).toThrow(/duplicate id/);
-    writeConfig({ profiles: { reserved: { groups: [{ id: 'all', label: 'A', match: ['**'] }] } } });
-    expect(() => loadProfile({ root: dir, name: 'reserved', exclude: [] })).toThrow(/reserved id/);
+    for (const id of ['all', '__proto__', 'constructor']) {
+      writeConfig(dir, { profiles: { reserved: { groups: [{ id, label: 'A', match: ['**'] }] } } });
+      expect(() => loadProfile({ root: dir, name: 'reserved', exclude: [] })).toThrow(/reserved id/);
+    }
+  });
+
+  test('[loadProfile] 分类 id 也不能占用保留名', () => {
+    const dir = freshDir();
+    writeConfig(dir, { profiles: { bad: { categories: [{ id: '__proto__', label: 'A' }] } } });
+    expect(() => loadProfile({ root: dir, name: 'bad', exclude: [] })).toThrow(/reserved id/);
   });
 
   test('[loadProfile] 非法字段应该给出定位明确的错误', () => {
-    writeConfig({ profiles: { bad: { groups: [{ label: 'A', match: ['**'] }] } } });
+    const dir = freshDir();
+    writeConfig(dir, { profiles: { bad: { groups: [{ label: 'A', match: ['**'] }] } } });
     expect(() => loadProfile({ root: dir, name: 'bad', exclude: [] })).toThrow(/groups\[0\]\.id: must be a non-empty string/);
 
-    writeConfig({ profiles: { bad: { groups: [{ id: 'a', label: 'A', match: 'x' }] } } });
+    writeConfig(dir, { profiles: { bad: { groups: [{ id: 'a', label: 'A', match: 'x' }] } } });
     expect(() => loadProfile({ root: dir, name: 'bad', exclude: [] })).toThrow(/groups\[0\]\.match: must be an array of strings/);
 
-    writeConfig({ profiles: { bad: { categories: [] } } });
+    writeConfig(dir, { profiles: { bad: { categories: [] } } });
     expect(() => loadProfile({ root: dir, name: 'bad', exclude: [] })).toThrow(/categories: must be a non-empty array/);
 
-    writeConfig({ profiles: { bad: { groups: [{ id: 'a', label: 'A', hue: 999, match: ['**'] }] } } });
+    writeConfig(dir, { profiles: { bad: { groups: [{ id: 'a', label: 'A', hue: 999, match: ['**'] }] } } });
     expect(() => loadProfile({ root: dir, name: 'bad', exclude: [] })).toThrow(/hue: must be a number between 0 and 360/);
 
-    writeConfig({ profiles: { bad: { groups: [], ignore: [1] } } });
+    writeConfig(dir, { profiles: { bad: { groups: [], ignore: [1] } } });
     expect(() => loadProfile({ root: dir, name: 'bad', exclude: [] })).toThrow(/ignore: must be an array of strings/);
   });
 
-  test('[loadProfile] 配置文件不是合法 json 时应该报出读取失败', () => {
-    writeFileSync(configPath, '{ oops');
-    expect(() => loadProfile({ root: dir, name: 'all', exclude: [] })).toThrow(/failed to read config file/);
+  test('[loadProfile] 配置文件读不动或不是合法 json 时应该报出原因', () => {
+    const dir = freshDir();
+    writeFileSync(join(dir, 'codelens.config.json'), '{ oops');
+    expect(() => loadProfile({ root: dir, name: 'all', exclude: [] })).toThrow(/failed to parse config file/);
+    rmSync(join(dir, 'codelens.config.json'));
+    writeFileSync(join(dir, 'broken.json'), '{ oops');
+    expect(() => loadProfile({ root: dir, name: 'broken.json', exclude: [] })).toThrow(/failed to parse config file/);
   });
 
   test('[loadProfile] 默认分类里生成代码、文档与配置默认不计入', () => {
@@ -121,8 +195,7 @@ describe('loadProfile', () => {
   });
 
   test('[loadProfile] 内置分类与内置分组都应该带 labelKey，供页面翻译', () => {
-    // 上一个用例留下了一份坏配置，先清掉，走内置档的分支
-    rmSync(configPath, { force: true });
+    const dir = freshDir();
     expect(DEFAULT_CATEGORIES.every((cat) => cat.labelKey === `category.${cat.id}`)).toBe(true);
     for (const name of ['all', 'web']) {
       const profile = loadProfile({ root: dir, name, exclude: [] });

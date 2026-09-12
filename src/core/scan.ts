@@ -2,15 +2,16 @@
 // 文件枚举
 // 优先用 git 的索引加未跟踪文件列表，天然遵守 .gitignore（含全局与 .git/info/exclude）；
 // git 缺失或目录不是仓库时退回递归遍历，用同一套 gitignore 语义自行过滤。
+// 枚举时顺手取回文件大小，行数统计不必再 stat 一遍。
 // ---------------------------------------------------------------------------
 import { execFileSync } from 'node:child_process';
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { matchesAny } from './glob.js';
+import { createGlob } from './glob.js';
 import { isIgnored, loadIgnoreFile } from './gitignore.js';
 import type { IgnoreRule } from './gitignore.js';
 
-export interface ScanOptions {
+interface ScanOptions {
   root: string;
   /** 在 .gitignore 之外额外忽略的路径 glob。 */
   ignore: string[];
@@ -18,12 +19,21 @@ export interface ScanOptions {
   useGitignore: boolean;
 }
 
+/** 枚举结果中的一个文件：仓库相对路径与字节大小。 */
+export interface ScannedFile {
+  path: string;
+  size: number;
+}
+
 export interface ScanResult {
   /** 仓库相对路径，posix 分隔，已排序。 */
-  files: string[];
+  entries: ScannedFile[];
   /** git 表示来自 git 索引，walk 表示自行遍历。 */
   mode: 'git' | 'walk';
 }
+
+/** git 调用统一关掉可能执行外部程序的配置，扫描不受信任的目录时更安全。 */
+export const GIT_SAFE_CONFIG = ['-c', 'core.fsmonitor=false', '-c', 'log.showSignature=false'];
 
 /** 依赖、构建产物与虚拟环境目录，任何模式下都跳过。 */
 const SKIP_DIRS = new Set([
@@ -36,18 +46,50 @@ const SKIP_DIRS = new Set([
   '.idea', '.vscode', 'tmp', 'temp',
 ]);
 
-function keep(path: string, ignore: readonly string[]): boolean {
-  if (path.split('/').some((seg) => SKIP_DIRS.has(seg))) {
-    return false;
+type PathFilter = (path: string) => boolean;
+
+/**
+ * 生成「这个路径要统计吗」的判定。除文件名外的任一段命中 SKIP_DIRS 就跳过
+ * （目录名与文件同名的情形按文件保留），命中忽略 glob 的目录连同内容一起跳过：
+ * `--exclude mydata` 与 `--exclude mydata/` 都能排除 mydata 下的全部文件。
+ */
+export function createPathFilter(ignore: readonly string[]): PathFilter {
+  if (ignore.length === 0) {
+    return (path: string): boolean => !path.split('/').slice(0, -1).some((seg) => SKIP_DIRS.has(seg));
   }
-  return !matchesAny(path, ignore);
+  const matchers = ignore.map((pattern) => createGlob(pattern));
+  const dirCache = new Map<string, boolean>();
+  const ignoredDir = (dir: string): boolean => {
+    const hit = dirCache.get(dir);
+    if (hit !== undefined) {
+      return hit;
+    }
+    const value = matchers.some((matcher) => matcher(dir));
+    dirCache.set(dir, value);
+    return value;
+  };
+  return (path: string): boolean => {
+    const parts = path.split('/');
+    const dirs = parts.slice(0, -1);
+    if (dirs.some((seg) => SKIP_DIRS.has(seg))) {
+      return false;
+    }
+    let prefix = '';
+    for (const dir of dirs) {
+      prefix = prefix ? `${prefix}/${dir}` : dir;
+      if (ignoredDir(prefix)) {
+        return false;
+      }
+    }
+    return !matchers.some((matcher) => matcher(path));
+  };
 }
 
 function listViaGit(root: string): string[] | undefined {
   try {
     const out = execFileSync(
       'git',
-      ['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+      ['-C', root, ...GIT_SAFE_CONFIG, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
       { maxBuffer: 256 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] },
     );
     return out.toString('utf8').split('\0').filter(Boolean);
@@ -57,8 +99,8 @@ function listViaGit(root: string): string[] | undefined {
   }
 }
 
-function walk(root: string, opts: ScanOptions): string[] {
-  const files: string[] = [];
+function walk(root: string, opts: ScanOptions): ScannedFile[] {
+  const files: ScannedFile[] = [];
 
   const visit = (dir: string, relDir: string, rules: IgnoreRule[]): void => {
     const scoped = opts.useGitignore ? [...rules, ...loadIgnoreFile(dir, relDir)] : rules;
@@ -71,10 +113,6 @@ function walk(root: string, opts: ScanOptions): string[] {
         if (SKIP_DIRS.has(ent.name)) {
           continue;
         }
-        // 不按 gitignore 过滤时沿用习惯做法：跳过除 .github 以外的隐藏目录
-        if (!opts.useGitignore && ent.name.startsWith('.') && ent.name !== '.github') {
-          continue;
-        }
         if (opts.useGitignore && isIgnored(rel, true, scoped)) {
           continue;
         }
@@ -84,7 +122,10 @@ function walk(root: string, opts: ScanOptions): string[] {
       if (opts.useGitignore && isIgnored(rel, false, scoped)) {
         continue;
       }
-      files.push(rel);
+      const stat = statSync(join(dir, ent.name), { throwIfNoEntry: false });
+      if (stat?.isFile()) {
+        files.push({ path: rel, size: stat.size });
+      }
     }
   };
 
@@ -94,25 +135,26 @@ function walk(root: string, opts: ScanOptions): string[] {
 
 /** 列出仓库内应当统计的文件。 */
 export function listFiles(opts: ScanOptions): ScanResult {
+  const keep = createPathFilter(opts.ignore);
   if (opts.useGitignore) {
     const viaGit = listViaGit(opts.root);
     if (viaGit) {
-      const files = viaGit
-        .filter((path) => keep(path, opts.ignore))
-        .filter((path) => {
-          try {
-            return statSync(join(opts.root, path)).isFile();
-          } catch {
-            // 索引里有、磁盘上已被删除的文件
-            return false;
-          }
-        });
-      files.sort();
-      return { files, mode: 'git' };
+      const entries: ScannedFile[] = [];
+      for (const path of viaGit) {
+        if (!keep(path)) {
+          continue;
+        }
+        // 索引里可能残留磁盘上已删除的文件
+        const stat = statSync(join(opts.root, path), { throwIfNoEntry: false });
+        if (stat?.isFile()) {
+          entries.push({ path, size: stat.size });
+        }
+      }
+      entries.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+      return { entries, mode: 'git' };
     }
   }
-  const files = walk(opts.root, opts)
-    .filter((path) => keep(path, opts.ignore))
-    .sort();
-  return { files, mode: 'walk' };
+  const entries = walk(opts.root, opts).filter((entry) => keep(entry.path));
+  entries.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return { entries, mode: 'walk' };
 }
