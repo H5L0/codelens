@@ -12,8 +12,8 @@ const PROFILE: Profile = {
   name: 'test',
   label: '测试',
   groups: [
-    { id: 'frontend', label: '前端', hue: 268, sat: 46, match: ['frontend/**'] },
-    { id: 'backend', label: '后端', hue: 214, sat: 58, match: ['**'] },
+    { id: 'frontend', label: 'Frontend', labelKey: 'profile.frontend', hue: 268, sat: 46, match: ['frontend/**'] },
+    { id: 'backend', label: 'Backend', hue: 214, sat: 58, match: ['**'] },
   ],
   categories: DEFAULT_CATEGORIES,
   ignore: [],
@@ -119,7 +119,9 @@ describe('buildCalendar', () => {
 
   test('[buildCalendar] 分组元信息应该原样带出', () => {
     expect(data.groups.map((group) => group.id)).toEqual(['frontend', 'backend']);
-    expect(data.groups[0].label).toBe('前端');
+    expect(data.groups[0].label).toBe('Frontend');
+    // labelKey 要一起下发给页面，页面才能按语言翻译内置分组
+    expect(data.groups[0].labelKey).toBe('profile.frontend');
     expect(data.root).toBe(dir.split(/[\\/]/).filter(Boolean).pop());
   });
 });

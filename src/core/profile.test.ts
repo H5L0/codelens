@@ -20,7 +20,7 @@ describe('loadProfile', () => {
     expect(profile.groups).toEqual([]);
     expect(profile.categories).toEqual(DEFAULT_CATEGORIES);
     expect(profile.configPath).toBeUndefined();
-    expect(profile.label).toBe('全部');
+    expect(profile.label).toBe('All');
   });
 
   test('[loadProfile] 内置 web 档应该把前端目录与其余部分分开', () => {
@@ -35,7 +35,7 @@ describe('loadProfile', () => {
   });
 
   test('[loadProfile] 未知档名应该提示可选项', () => {
-    expect(() => loadProfile({ root: dir, name: 'nope', exclude: [] })).toThrow(/没有名为 nope 的配置档/);
+    expect(() => loadProfile({ root: dir, name: 'nope', exclude: [] })).toThrow(/no profile named nope/);
     expect(() => loadProfile({ root: dir, name: 'nope', exclude: [] })).toThrow(/all/);
   });
 
@@ -75,7 +75,7 @@ describe('loadProfile', () => {
     const profile = loadProfile({ root: dir, name: 'bare', exclude: [] });
     expect(profile.groups).toEqual([]);
     expect(profile.categories).toEqual(DEFAULT_CATEGORIES);
-    expect(profile.label).toBe('全部');
+    expect(profile.label).toBe('All');
   });
 
   test('[loadProfile] 应该支持把配置文件直接当档用', () => {
@@ -87,36 +87,46 @@ describe('loadProfile', () => {
 
   test('[loadProfile] 分组 id 重复或占用保留名应该报错', () => {
     writeConfig({ profiles: { dup: { groups: [{ id: 'a', label: 'A', match: ['**'] }, { id: 'a', label: 'B', match: ['**'] }] } } });
-    expect(() => loadProfile({ root: dir, name: 'dup', exclude: [] })).toThrow(/重复的 id/);
+    expect(() => loadProfile({ root: dir, name: 'dup', exclude: [] })).toThrow(/duplicate id/);
     writeConfig({ profiles: { reserved: { groups: [{ id: 'all', label: 'A', match: ['**'] }] } } });
-    expect(() => loadProfile({ root: dir, name: 'reserved', exclude: [] })).toThrow(/保留的 id/);
+    expect(() => loadProfile({ root: dir, name: 'reserved', exclude: [] })).toThrow(/reserved id/);
   });
 
   test('[loadProfile] 非法字段应该给出定位明确的错误', () => {
     writeConfig({ profiles: { bad: { groups: [{ label: 'A', match: ['**'] }] } } });
-    expect(() => loadProfile({ root: dir, name: 'bad', exclude: [] })).toThrow(/groups\[0\]\.id 必须是非空字符串/);
+    expect(() => loadProfile({ root: dir, name: 'bad', exclude: [] })).toThrow(/groups\[0\]\.id: must be a non-empty string/);
 
     writeConfig({ profiles: { bad: { groups: [{ id: 'a', label: 'A', match: 'x' }] } } });
-    expect(() => loadProfile({ root: dir, name: 'bad', exclude: [] })).toThrow(/groups\[0\]\.match 必须是字符串数组/);
+    expect(() => loadProfile({ root: dir, name: 'bad', exclude: [] })).toThrow(/groups\[0\]\.match: must be an array of strings/);
 
     writeConfig({ profiles: { bad: { categories: [] } } });
-    expect(() => loadProfile({ root: dir, name: 'bad', exclude: [] })).toThrow(/categories 必须是非空数组/);
+    expect(() => loadProfile({ root: dir, name: 'bad', exclude: [] })).toThrow(/categories: must be a non-empty array/);
 
     writeConfig({ profiles: { bad: { groups: [{ id: 'a', label: 'A', hue: 999, match: ['**'] }] } } });
-    expect(() => loadProfile({ root: dir, name: 'bad', exclude: [] })).toThrow(/hue 必须是 0 到 360 之间的数字/);
+    expect(() => loadProfile({ root: dir, name: 'bad', exclude: [] })).toThrow(/hue: must be a number between 0 and 360/);
 
     writeConfig({ profiles: { bad: { groups: [], ignore: [1] } } });
-    expect(() => loadProfile({ root: dir, name: 'bad', exclude: [] })).toThrow(/ignore 必须是字符串数组/);
+    expect(() => loadProfile({ root: dir, name: 'bad', exclude: [] })).toThrow(/ignore: must be an array of strings/);
   });
 
   test('[loadProfile] 配置文件不是合法 json 时应该报出读取失败', () => {
     writeFileSync(configPath, '{ oops');
-    expect(() => loadProfile({ root: dir, name: 'all', exclude: [] })).toThrow(/读取配置文件/);
+    expect(() => loadProfile({ root: dir, name: 'all', exclude: [] })).toThrow(/failed to read config file/);
   });
 
   test('[loadProfile] 默认分类里生成代码、文档与配置默认不计入', () => {
     const off = DEFAULT_CATEGORIES.filter((cat) => cat.defaultOn === false).map((cat) => cat.id);
     expect(off).toEqual(['generated', 'doc', 'config']);
     expect(DEFAULT_CATEGORIES[DEFAULT_CATEGORIES.length - 1].match).toBeUndefined();
+  });
+
+  test('[loadProfile] 内置分类与内置分组都应该带 labelKey，供页面翻译', () => {
+    // 上一个用例留下了一份坏配置，先清掉，走内置档的分支
+    rmSync(configPath, { force: true });
+    expect(DEFAULT_CATEGORIES.every((cat) => cat.labelKey === `category.${cat.id}`)).toBe(true);
+    for (const name of ['all', 'web']) {
+      const profile = loadProfile({ root: dir, name, exclude: [] });
+      expect(profile.groups.every((group) => group.labelKey !== undefined)).toBe(true);
+    }
   });
 });

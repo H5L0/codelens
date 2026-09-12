@@ -5,15 +5,16 @@
 // ---------------------------------------------------------------------------
 import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import type { CategoryDef, LocData, Rect, TreeNode } from '../../core/types.js';
 import { Switch } from '../components/Switch.js';
 import { formatNumber as f } from '../lib/format.js';
+import { useLabel } from '../lib/i18n.js';
 import { buildTree, visibleChildren } from '../lib/tree.js';
 import type { Metric } from '../lib/tree.js';
 import { layoutTreemap } from '../lib/treemap.js';
 import type { PaintedNode } from '../lib/treemap.js';
 
-const HINT = '点击方块放大到该目录并铺满画面，面包屑可返回';
 const ANIM_MS = 300;
 
 type Anim = { kind: 'in'; rect: Rect } | { kind: 'out'; focusPath: string };
@@ -48,6 +49,7 @@ const NodeEl = memo(function NodeEl({
   painted: PaintedNode;
   meta: ReadonlyMap<string, CategoryDef>;
 }) {
+  const { t } = useTranslation();
   const { node, rect, depth, headH, open, children } = painted;
   const category = meta.get(node.cat);
   const light = Math.max(32, 60 - depth * 6);
@@ -77,7 +79,7 @@ const NodeEl = memo(function NodeEl({
           ))}
         </div>
       ) : node.isDir && rect.w >= 64 && rect.h >= 34 ? (
-        <div className="tm-badge">{`${f(node.fileCount)} 个文件`}</div>
+        <div className="tm-badge">{t('loc.files', { count: node.fileCount })}</div>
       ) : null}
     </div>
   );
@@ -97,6 +99,7 @@ const Stage = memo(function Stage({
   leaving: boolean;
   meta: ReadonlyMap<string, CategoryDef>;
 }) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -133,7 +136,7 @@ const Stage = memo(function Stage({
   return (
     <div className={`tm-stage${leaving ? ' leaving' : ''}`} ref={ref}>
       {spec.empty ? (
-        <div className="tm-empty">当前开关组合下没有可统计的文本文件。</div>
+        <div className="tm-empty">{t('loc.empty')}</div>
       ) : (
         spec.painted.map((painted) => <NodeEl key={painted.node.path} painted={painted} meta={meta} />)
       )}
@@ -161,6 +164,8 @@ export interface LocViewProps {
 }
 
 export function LocView({ data, error, hidden }: LocViewProps) {
+  const { t } = useTranslation();
+  const label = useLabel();
   const [metric, setMetric] = useState<Metric>('lines');
   const [depthLevels, setDepthLevels] = useState<1 | 2>(2);
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
@@ -377,8 +382,14 @@ export function LocView({ data, error, hidden }: LocViewProps) {
       return '';
     }
     const share = viewRoot.value > 0 ? (hover.value / viewRoot.value) * 100 : 0;
-    const scope = hover.isDir ? `${f(hover.fileCount)} 个文件` : (meta.get(hover.cat)?.label ?? '');
-    return `${f(hover.value)} 行 · 占 ${share.toFixed(1)}%${scope ? ` · ${scope}` : ''}`;
+    const category = meta.get(hover.cat);
+    const scope = hover.isDir ? t('loc.files', { count: hover.fileCount }) : category ? label(category) : '';
+    return t('loc.statusMeta', {
+      context: scope ? 'scope' : undefined,
+      lines: f(hover.value),
+      percent: share.toFixed(1),
+      scope,
+    });
   })();
 
   return (
@@ -386,30 +397,33 @@ export function LocView({ data, error, hidden }: LocViewProps) {
       <div>
         <div className="loc-bar">
           <div className="loc-summary">
-            {`当前筛选 `}
-            <b>{f(rootValue)}</b>
-            <span className="total">{`/${f(totalLines)}`}</span>
-            {` 行 · `}
-            <b>{f(rootFiles)}</b>
-            <span className="total">{`/${f(data?.totals.files ?? 0)}`}</span>
-            {` 个文件 · 覆盖全仓库 `}
-            <b>{`${covered.toFixed(1)}%`}</b>
+            <Trans
+              i18nKey="loc.summary"
+              values={{
+                lines: f(rootValue),
+                total: f(totalLines),
+                files: f(rootFiles),
+                allFiles: f(data?.totals.files ?? 0),
+                percent: `${covered.toFixed(1)}%`,
+              }}
+              components={{ b: <b />, total: <span className="total" /> }}
+            />
           </div>
           <div className="loc-switches">
             <Switch
               checked={metric === 'nonBlank'}
-              title="按非空行统计，忽略空白行"
+              title={t('loc.blankTitle')}
               onChange={(on) => setMetric(on ? 'nonBlank' : 'lines')}
             >
-              剔除空行
+              {t('loc.blank')}
             </Switch>
             <Switch
               checked={depthLevels === 2}
-              title="每个目录默认展开到第几层"
+              title={t('loc.depthTitle')}
               onChange={(on) => setDepthLevels(on ? 2 : 1)}
             >
-              {`显示层级 `}
-              <span className="depth-value">{`${depthLevels} 层`}</span>
+              {`${t('loc.depthLabel')} `}
+              <span className="depth-value">{t('loc.levels', { count: depthLevels })}</span>
             </Switch>
           </div>
         </div>
@@ -425,7 +439,7 @@ export function LocView({ data, error, hidden }: LocViewProps) {
                   <button
                     type="button"
                     className="crumb"
-                    title={`放大到 ${crumb.path || data?.root}`}
+                    title={t('loc.zoomTo', { path: crumb.path || data?.root })}
                     onClick={() => zoomTo(crumb.path, { kind: 'out', focusPath: viewRoot?.path ?? '' })}
                   >
                     {crumb.name}
@@ -433,10 +447,12 @@ export function LocView({ data, error, hidden }: LocViewProps) {
                 )}
               </Fragment>
             ))}
-            <span className="crumbs-meta">{`${f(viewRoot?.value ?? 0)} 行 · 占筛选总量 ${scopeShare.toFixed(1)}%`}</span>
+            <span className="crumbs-meta">
+              {t('loc.crumbsMeta', { lines: f(viewRoot?.value ?? 0), percent: scopeShare.toFixed(1) })}
+            </span>
           </div>
           <div className="tm-status">
-            <span className="path">{hover ? hover.path || data?.root : HINT}</span>
+            <span className="path">{hover ? hover.path || data?.root : t('loc.hint')}</span>
             <span className="meta">{hoverMeta}</span>
           </div>
           <div
@@ -460,12 +476,12 @@ export function LocView({ data, error, hidden }: LocViewProps) {
                   type="button"
                   className={`lg${on ? '' : ' off'}`}
                   style={cssVars({ '--c': `hsl(${category.hue} ${category.sat}% 48%)` })}
-                  title={on ? '点击排除该类别' : '点击纳入该类别'}
+                  title={on ? t('loc.legendOn') : t('loc.legendOff')}
                   onClick={() => setToggled((prev) => ({ ...prev, [category.id]: !on }))}
                 >
                   <span className="sq" />
-                  <span className="lg-name">{category.label}</span>
-                  <span className="lg-val">{`${f(stat[metric])} 行 / ${f(stat.files)} 文件`}</span>
+                  <span className="lg-name">{label(category)}</span>
+                  <span className="lg-val">{t('loc.legendValue', { lines: f(stat[metric]), count: stat.files })}</span>
                 </button>
               );
             })}
@@ -473,9 +489,7 @@ export function LocView({ data, error, hidden }: LocViewProps) {
         </div>
       </div>
       <div className="load-error" hidden={error === undefined}>
-        {`无法读取行数数据（${error ?? ''}）。请通过 `}
-        <code>codelens</code>
-        {` 启动页面后访问，数据由它随服务一起生成。`}
+        <Trans i18nKey="loc.loadError" values={{ error: error ?? '' }} components={{ code: <code /> }} />
       </div>
     </section>
   );

@@ -68,7 +68,7 @@ export function createStaticMiddleware(webDir: string): Middleware {
     const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
     let filePath = resolve(webDir, rel);
     if (filePath !== webDir && !filePath.startsWith(webDir + sep)) {
-      sendText(res, 403, '禁止访问站点根目录之外的路径');
+      sendText(res, 403, 'path escapes the site root');
       return;
     }
     try {
@@ -126,7 +126,7 @@ export interface ListenOptions {
 export function startServer(middleware: Middleware, opts: ListenOptions): Promise<ServerHandle> {
   const handler = compose([middleware]);
   const server = createServer((req, res) => {
-    handler(req, res, () => sendText(res, 404, `未找到 ${req.url ?? '/'}`));
+    handler(req, res, () => sendText(res, 404, `not found: ${req.url ?? '/'}`));
   });
 
   const listen = (port: number, left: number): Promise<number> =>

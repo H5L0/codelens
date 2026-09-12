@@ -11,10 +11,19 @@ export interface Rect {
   h: number;
 }
 
+/** 带显示名的定义：内置项只给文案键，用户配置直接给 label。 */
+export interface Labeled {
+  label?: string;
+  labelKey?: string;
+}
+
 /** 日历分组：按路径 glob 把仓库切成前端/后端等几部分。 */
 export interface GroupDef {
   id: string;
+  /** 显示名，英文，CLI 直接使用。 */
   label: string;
+  /** 内置分组的文案键，页面按当前语言解析后覆盖 label。 */
+  labelKey?: string;
   hue: number;
   sat: number;
   /** 命中任意 glob 即归入该组，多个组时按配置顺序取第一个命中的。 */
@@ -24,7 +33,10 @@ export interface GroupDef {
 /** 行数分类：决定树形图的配色与图例。 */
 export interface CategoryDef {
   id: string;
+  /** 显示名，英文，CLI 直接使用。 */
   label: string;
+  /** 内置分类的文案键，页面按当前语言解析后覆盖 label。 */
+  labelKey?: string;
   hue: number;
   sat: number;
   /** 命中任意 glob 即归入该类，缺省表示兜底类。 */
@@ -69,7 +81,7 @@ export interface CalendarData {
   root: string;
   profile: string;
   /** 实际启用的分组，空数组表示不区分前后端。 */
-  groups: Array<Pick<GroupDef, 'id' | 'label' | 'hue' | 'sat'>>;
+  groups: Array<Pick<GroupDef, 'id' | 'label' | 'labelKey' | 'hue' | 'sat'>>;
   range: { min: string; max: string };
   totals: { days: number; groups: Record<string, GroupStat> };
   /** 单日改动行峰值，用于日历条宽度刻度。 */
@@ -90,7 +102,7 @@ export interface LocData {
   generatedAt: string;
   root: string;
   profile: string;
-  categories: Array<Pick<CategoryDef, 'id' | 'label' | 'hue' | 'sat' | 'defaultOn'>>;
+  categories: Array<Pick<CategoryDef, 'id' | 'label' | 'labelKey' | 'hue' | 'sat' | 'defaultOn'>>;
   totals: { files: number; lines: number; nonBlank: number };
   skipped: { binary: number; large: number };
   files: LocFileEntry[];

@@ -27,13 +27,13 @@ No configuration is required. Data is generated on the fly at startup, served to
 
 A week-based heatmap: the top bar of each cell is inserted lines, the bottom bar is deleted lines, and bar width uses a square-root scale. Hover a day to see that day's summary and commits; the header switch filters by group.
 
-![Change calendar](docs/screenshots/calendar.png)
+![Change calendar](docs/screenshots/en/calendar.png)
 
 ### Lines of code
 
 A treemap where rectangle area is proportional to line count, color is the category, and shade is the directory depth. Click a rectangle to zoom into that directory and use the breadcrumb or Esc to go back; the switches control the counting mode and expansion depth, and the legend toggles categories.
 
-![Lines of code](docs/screenshots/loc.png)
+![Lines of code](docs/screenshots/en/loc.png)
 
 ## Command line
 
@@ -115,6 +115,10 @@ Without `categories`, six built-in ones are used: application code, tests, scrip
 - The change calendar needs git: a repository without commits, or without git at all, leaves the calendar empty while the lines view still works.
 - Line counts say nothing about code complexity.
 - The treemap draws at most 6000 rectangles; the rest are not shown.
+
+## Languages
+
+The page follows your browser language. Simplified Chinese, English, Japanese and Korean are built in; other languages fall back to English. Append `?lang={langCode}` to the URL to override it for this session, for example `?lang=zh` or `?lang=ko`.
 
 ## Development
 

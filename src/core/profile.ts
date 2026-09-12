@@ -3,6 +3,7 @@
 // --profile 选择一份配置：内置的 all（不区分）与 web（常见前后端目录），
 // 或在 codelens.config.json（也可用 --profile 直接指向 json 文件）里自定义，
 // 用 groups 划分前后端等分组，用 categories 划分模块与文件类别。
+// 内置项的 label 是英文，labelKey 供页面按语言覆盖；用户配置的 label 原样使用。
 // ---------------------------------------------------------------------------
 import { readFileSync, statSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
@@ -16,7 +17,8 @@ import type { CategoryDef, Profile } from './types.js';
 export const DEFAULT_CATEGORIES: CategoryDef[] = [
   {
     id: 'test',
-    label: '测试',
+    label: 'Tests',
+    labelKey: 'category.test',
     hue: 152,
     sat: 46,
     match: [
@@ -28,7 +30,8 @@ export const DEFAULT_CATEGORIES: CategoryDef[] = [
   },
   {
     id: 'generated',
-    label: '生成代码',
+    label: 'Generated',
+    labelKey: 'category.generated',
     hue: 220,
     sat: 8,
     defaultOn: false,
@@ -43,10 +46,11 @@ export const DEFAULT_CATEGORIES: CategoryDef[] = [
       '**/.dep-baseline.json',
     ],
   },
-  { id: 'script', label: '脚本', hue: 32, sat: 62, match: ['scripts/**'] },
+  { id: 'script', label: 'Scripts', labelKey: 'category.script', hue: 32, sat: 62, match: ['scripts/**'] },
   {
     id: 'doc',
-    label: '文档',
+    label: 'Docs',
+    labelKey: 'category.doc',
     hue: 268,
     sat: 46,
     defaultOn: false,
@@ -54,7 +58,8 @@ export const DEFAULT_CATEGORIES: CategoryDef[] = [
   },
   {
     id: 'config',
-    label: '配置',
+    label: 'Config',
+    labelKey: 'category.config',
     hue: 332,
     sat: 52,
     defaultOn: false,
@@ -73,7 +78,7 @@ export const DEFAULT_CATEGORIES: CategoryDef[] = [
       '.github/**',
     ],
   },
-  { id: 'app', label: '应用代码', hue: 214, sat: 58 },
+  { id: 'app', label: 'Application code', labelKey: 'category.app', hue: 214, sat: 58 },
 ];
 
 // ---------------------------------------------------------------------------
@@ -81,15 +86,17 @@ export const DEFAULT_CATEGORIES: CategoryDef[] = [
 // ---------------------------------------------------------------------------
 
 /** 未配置的兜底档：不做任何分组，整个仓库一起统计。 */
-const PROFILE_ALL: ProfileEntry = { label: '全部' };
+const PROFILE_ALL: ProfileEntry = { label: 'All', labelKey: 'profile.all' };
 
 /** 常见前后端目录布局：前端目录归前端，其余归后端。 */
 const PROFILE_WEB: ProfileEntry = {
-  label: '前后端',
+  label: 'Frontend / backend',
+  labelKey: 'profile.web',
   groups: [
     {
       id: 'frontend',
-      label: '前端',
+      label: 'Frontend',
+      labelKey: 'profile.frontend',
       hue: 268,
       sat: 46,
       match: [
@@ -102,7 +109,7 @@ const PROFILE_WEB: ProfileEntry = {
         '**/*.{html,css,scss,less,vue,svelte}',
       ],
     },
-    { id: 'backend', label: '后端', hue: 214, sat: 58, match: ['**'] },
+    { id: 'backend', label: 'Backend', labelKey: 'profile.backend', hue: 214, sat: 58, match: ['**'] },
   ],
 };
 
@@ -115,6 +122,7 @@ const BUILTIN_PROFILES: Record<string, ProfileEntry> = { all: PROFILE_ALL, web: 
 interface GroupEntry {
   id: string;
   label: string;
+  labelKey?: string;
   hue: number;
   sat: number;
   match: string[];
@@ -122,32 +130,33 @@ interface GroupEntry {
 
 interface ProfileEntry {
   label?: string;
+  labelKey?: string;
   groups?: GroupEntry[];
   categories?: CategoryDef[];
   ignore?: string[];
 }
 
 function fail(where: string, message: string): never {
-  throw new Error(`配置 ${where} ${message}`);
+  throw new Error(`config ${where}: ${message}`);
 }
 
 function asObject(value: unknown, where: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    fail(where, '必须是对象');
+    fail(where, 'must be an object');
   }
   return value as Record<string, unknown>;
 }
 
 function asString(value: unknown, where: string): string {
   if (typeof value !== 'string' || value === '') {
-    fail(where, '必须是非空字符串');
+    fail(where, 'must be a non-empty string');
   }
   return value;
 }
 
 function asStringArray(value: unknown, where: string): string[] {
   if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || item === '')) {
-    fail(where, '必须是字符串数组');
+    fail(where, 'must be an array of strings');
   }
   return value as string[];
 }
@@ -157,7 +166,7 @@ function asHue(value: unknown, where: string, fallback: number): number {
     return fallback;
   }
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 360) {
-    fail(where, '必须是 0 到 360 之间的数字');
+    fail(where, 'must be a number between 0 and 360');
   }
   return value;
 }
@@ -167,7 +176,7 @@ function asPercent(value: unknown, where: string, fallback: number): number {
     return fallback;
   }
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 100) {
-    fail(where, '必须是 0 到 100 之间的数字');
+    fail(where, 'must be a number between 0 and 100');
   }
   return value;
 }
@@ -177,7 +186,7 @@ function parseGroups(value: unknown, where: string): GroupEntry[] {
     return [];
   }
   if (!Array.isArray(value)) {
-    fail(where, '必须是数组');
+    fail(where, 'must be an array');
   }
   return value.map((item, i) => {
     const at = `${where}[${i}]`;
@@ -197,7 +206,7 @@ function parseCategories(value: unknown, where: string): CategoryDef[] {
     return DEFAULT_CATEGORIES;
   }
   if (!Array.isArray(value) || value.length === 0) {
-    fail(where, '必须是非空数组');
+    fail(where, 'must be a non-empty array');
   }
   return value.map((item, i) => {
     const at = `${where}[${i}]`;
@@ -213,7 +222,7 @@ function parseCategories(value: unknown, where: string): CategoryDef[] {
     }
     if (obj.defaultOn !== undefined) {
       if (typeof obj.defaultOn !== 'boolean') {
-        fail(`${at}.defaultOn`, '必须是布尔值');
+        fail(`${at}.defaultOn`, 'must be a boolean');
       }
       category.defaultOn = obj.defaultOn;
     }
@@ -238,7 +247,7 @@ function readJson(path: string): unknown {
   try {
     return JSON.parse(readFileSync(path, 'utf8'));
   } catch (err) {
-    throw new Error(`读取配置文件 ${path} 失败：${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`failed to read config file ${path}: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -276,33 +285,33 @@ export function loadProfile(opts: LoadProfileOptions): ResolvedProfile {
     usedConfig = file;
   } else if (opts.configPath || exists(configPath)) {
     const file = asObject(readJson(configPath), configPath);
-    const profiles = file.profiles === undefined ? {} : asObject(file.profiles, `${configPath} 的 profiles`);
+    const profiles = file.profiles === undefined ? {} : asObject(file.profiles, `profiles of ${configPath}`);
     if (profiles[name] === undefined) {
-      fail(`配置文件 ${configPath}`, `里没有名为 ${name} 的配置档，可选：${names(profiles, BUILTIN_PROFILES)}`);
+      fail(configPath, `has no profile named ${name}; available: ${names(profiles, BUILTIN_PROFILES)}`);
     }
-    entry = parseEntry(profiles[name], `${configPath} 的 profiles.${name}`);
+    entry = parseEntry(profiles[name], `profiles.${name} of ${configPath}`);
     usedConfig = configPath;
   } else if (BUILTIN_PROFILES[name]) {
     entry = BUILTIN_PROFILES[name];
   } else {
-    fail(`没有名为 ${name} 的配置档`, `，可选：${names(undefined, BUILTIN_PROFILES)}`);
+    throw new Error(`no profile named ${name}; available: ${names(undefined, BUILTIN_PROFILES)}`);
   }
 
   const groups = entry.groups ?? [];
   const ids = new Set<string>();
   for (const group of groups) {
     if (ids.has(group.id)) {
-      fail(`${usedConfig ?? name} 的分组`, `出现重复的 id：${group.id}`);
+      fail(`groups of ${usedConfig ?? name}`, `contain a duplicate id: ${group.id}`);
     }
     ids.add(group.id);
   }
   if (ids.has('all')) {
-    fail(`${usedConfig ?? name} 的分组`, '不能使用保留的 id：all');
+    fail(`groups of ${usedConfig ?? name}`, 'must not use the reserved id: all');
   }
 
   return {
     name,
-    label: entry.label ?? (groups.length > 0 ? groups.map((g) => g.label).join('/') : '全部'),
+    label: entry.label ?? (groups.length > 0 ? groups.map((group) => group.label).join(' / ') : 'All'),
     groups,
     categories: entry.categories ?? DEFAULT_CATEGORIES,
     ignore: [...(entry.ignore ?? []), ...opts.exclude],
@@ -311,7 +320,7 @@ export function loadProfile(opts: LoadProfileOptions): ResolvedProfile {
 }
 
 function names(profiles: Record<string, unknown> | undefined, builtin: Record<string, ProfileEntry>): string {
-  return [...Object.keys(profiles ?? {}), ...Object.keys(builtin)].join('、');
+  return [...Object.keys(profiles ?? {}), ...Object.keys(builtin)].join(', ');
 }
 
 function isProfileFile(name: string): boolean {

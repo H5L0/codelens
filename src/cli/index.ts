@@ -39,20 +39,25 @@ function exists(path: string): boolean {
   }
 }
 
+/** 左侧标签统一宽度，让多行输出对齐。 */
+const LABEL_COL = 10;
+
+const tag = (name: string): string => name.padEnd(LABEL_COL);
+
 function log(label: string, text: string): void {
-  console.log(`${label.padEnd(6)}${text}`);
+  console.log(`${tag(label)}${text}`);
 }
 
 /** git 不可用或目录不是仓库时保留空日历，让行数视图仍能打开。 */
 function readCalendar(root: string, profile: Profile, days: number): CalendarData {
   if (!isGitRepo(root)) {
-    console.warn('警告  目录不在 git 仓库中，改动日历将为空');
+    console.warn(`${tag('warn')}directory is not inside a git repository, the calendar will be empty`);
     return emptyCalendar(root, profile);
   }
   try {
     return buildCalendar(root, profile, { days });
   } catch (err) {
-    console.warn(`警告  读取 git 历史失败，改动日历将为空：${err instanceof Error ? err.message : String(err)}`);
+    console.warn(`${tag('warn')}failed to read git history, the calendar will be empty: ${err instanceof Error ? err.message : String(err)}`);
     return emptyCalendar(root, profile);
   }
 }
@@ -78,7 +83,7 @@ async function main(): Promise<void> {
 
   const root = resolve(args.dir === '' ? process.cwd() : args.dir);
   if (!isDirectory(root)) {
-    throw new Error(`目录不存在：${root}`);
+    throw new Error(`directory does not exist: ${root}`);
   }
 
   const profile = loadProfile({
@@ -89,22 +94,22 @@ async function main(): Promise<void> {
   });
 
   console.log(`codelens ${version()}`);
-  log('仓库', root);
-  log('配置档', `${profile.name}（${profile.label}）${profile.configPath ? ` · ${profile.configPath}` : ''}`);
+  log('repo', root);
+  log('profile', `${profile.name} (${profile.label})${profile.configPath ? ` · ${profile.configPath}` : ''}`);
 
   const loc = buildLoc(root, profile, { useGitignore: args.useGitignore });
-  const scanLabel = loc.scan.mode === 'git' ? 'git 索引，按 .gitignore 过滤' : '目录遍历';
-  log('文件', `${f(loc.data.totals.files)} 个 · ${f(loc.data.totals.lines)} 行（${scanLabel}）`);
+  const scanLabel = loc.scan.mode === 'git' ? 'git index, filtered by .gitignore' : 'directory walk';
+  log('files', `${f(loc.data.totals.files)} files · ${f(loc.data.totals.lines)} lines (${scanLabel})`);
   if (profile.groups.length > 0) {
-    log('分组', profile.groups.map((group) => `${group.label}=${group.match.join(' ')}`).join('　'));
+    log('groups', profile.groups.map((group) => `${group.label}=${group.match.join(' ')}`).join('  '));
   }
 
   const calendar = readCalendar(root, profile, args.days);
   log(
-    '日历',
+    'calendar',
     calendar.range.min
-      ? `${calendar.range.min} ~ ${calendar.range.max} · ${calendar.totals.days} 天有提交`
-      : '该时间范围内没有提交',
+      ? `${calendar.range.min} ~ ${calendar.range.max} · ${calendar.totals.days} days with commits`
+      : 'no commits in this range',
   );
 
   if (args.dump) {
@@ -112,7 +117,7 @@ async function main(): Promise<void> {
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, 'data.json'), JSON.stringify(calendar));
     writeFileSync(join(outDir, 'loc.json'), JSON.stringify(loc.data));
-    log('导出', join(outDir, 'data.json'));
+    log('export', join(outDir, 'data.json'));
     log('', join(outDir, 'loc.json'));
     return;
   }
@@ -121,7 +126,7 @@ async function main(): Promise<void> {
 
   if (args.dev) {
     const dev = await startDevServer(payloads, { host: args.host, port: args.port });
-    log('服务', `${dev.url}（Vite 开发模式，前端改动即时生效）`);
+    log('server', `${dev.url} (Vite dev mode, front-end changes apply instantly)`);
     if (args.open) {
       launchBrowser(dev.url);
     }
@@ -133,13 +138,13 @@ async function main(): Promise<void> {
 
   const dir = webDir(false);
   if (!exists(join(dir, 'index.html'))) {
-    throw new Error(`未找到前端构建产物 ${dir}，请先执行 npm run build，或改用 --dev`);
+    throw new Error(`front-end build not found at ${dir}; run npm run build or use --dev`);
   }
   const server = await startServer(compose([createApiMiddleware(payloads), createStaticMiddleware(dir)]), {
     host: args.host,
     port: args.port,
   });
-  log('服务', server.url);
+  log('server', server.url);
   if (args.open) {
     launchBrowser(server.url);
   }
@@ -150,6 +155,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  console.error(`错误  ${err instanceof Error ? err.message : String(err)}`);
+  console.error(`${tag('error')}${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);
 });

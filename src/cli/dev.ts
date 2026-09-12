@@ -22,7 +22,7 @@ export async function startDevServer(payloads: Payloads, opts: DevOptions): Prom
   try {
     vite = await import('vite');
   } catch {
-    throw new Error('开发模式需要 vite，请在包目录内执行 npm install 后重试');
+    throw new Error('dev mode requires vite; run npm install inside the package directory and retry');
   }
 
   const server = await vite.createServer({

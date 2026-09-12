@@ -91,7 +91,7 @@ export function buildLoc(root: string, profile: Profile, opts: LocOptions): LocR
       generatedAt: new Date().toISOString(),
       root: repoName(root),
       profile: profile.name,
-      categories: profile.categories.map(({ id, label, hue, sat, defaultOn }) => ({ id, label, hue, sat, defaultOn })),
+      categories: profile.categories.map(({ id, label, labelKey, hue, sat, defaultOn }) => ({ id, label, labelKey, hue, sat, defaultOn })),
       totals: { files: files.length, lines: sum((f) => f.lines), nonBlank: sum((f) => f.nonBlank) },
       skipped,
       files,

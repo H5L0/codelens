@@ -6,9 +6,11 @@
 
 ```
 src/
-├── cli/          命令行：参数解析、本地托管、Vite 开发服务器
+├── cli/          命令行：参数解析、本地托管、Vite 开发服务器（输出统一英文）
 ├── core/         与界面无关的核心：gitignore 与 glob 匹配、文件枚举、行数统计、git 历史、配置档
 └── web/          React 界面：两个视图、树形图布局、分段开关与开关组件
+    ├── locales/  页面文案，zh.ts 与 en.ts 键一一对应
+    └── lib/      多语言初始化、目录树、树形图布局等纯逻辑
 ```
 
 依赖方向为 `core <- cli` 与 `core(类型) <- web`，`core` 不引用 React，也不引用 CLI。
@@ -66,6 +68,17 @@ npm run dev -- ../some-repo --profile web
 ### 前端（`web/`）
 
 树形图只绘制可视区域内的方块，单次上限 6000 个；目录树与布局的计算与 React 分离，放在 `web/lib/` 下便于单测。两个视图常驻 DOM，切换只改变 `hidden`。
+
+## 多语言
+
+命令行输出固定英文，不做多语言。页面用 i18next：
+
+- `i18next` + `react-i18next` 负责运行时，`i18next-browser-languagedetector` 负责探测语言，顺序是 URL 上的 `?lang=` 再 `navigator.languages`，`fallbackLng` 为英文；探测结果不写 localStorage 与 cookie，避免在用户机器上留痕。这几个包都是 `devDependencies`，构建时打进 `dist/web`，发布出去的包依旧没有运行时依赖。
+- 内置 简体中文（zh）、English（en）、日本語（ja）、한국어（ko），语言标签带地区时（`ja-JP`）靠 `nonExplicitSupportedLngs` 归一化到基础语言。
+- 文案在 `src/web/locales/`，`Messages` 取自 `zh.ts`，其余语言用它约束，少键或多键都会编译失败；`i18n.test.ts` 另外校验各语言去掉复数后缀后的键集合与中文一致。
+- 复数用 i18next 的 `_one` / `_other` 后缀并按 `count` 取值。中日韩都只有一个复数形式，i18next 只会取 `_other`，`_one` 是为了和英文结构对齐、让类型检查能过。
+- 内置分类与内置分组的 `label` 是英文（CLI 直接使用），另带 `labelKey` 随数据下发；页面用 `useLabel` 按当前语言翻译，用户配置里的 `label` 原样显示。加语言时补一份 `locales/<lang>.ts` 并把它加进 `resources` 与 `supportedLngs` 即可。
+- README 的截图按语言分目录放在 `docs/screenshots/<lang>/`，中文与英文各自引用自己那份。截图是手工用 `?lang=` 打开页面截的，改界面后需要重新截。
 
 ## 测试
 

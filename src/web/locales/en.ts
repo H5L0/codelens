@@ -1,0 +1,76 @@
+// ---------------------------------------------------------------------------
+// UI copy (English)
+// Mirrors zh.ts key by key; keys with {{count}} use i18next plurals.
+// ---------------------------------------------------------------------------
+import type { Messages } from './zh.js';
+
+export const en: Messages = {
+  view: {
+    calendar: 'Change calendar',
+    loc: 'Lines of code',
+    all: 'All',
+  },
+  app: {
+    titleCalendar: 'Change calendar',
+    range_one: '{{min}} ~ {{max}} · {{count}} day with commits',
+    range_other: '{{min}} ~ {{max}} · {{count}} days with commits',
+  },
+  calendar: {
+    add: 'Inserted lines (top)',
+    del: 'Deleted lines (bottom)',
+    scale: 'Bar width = line count, square-root scale; peak {{max}} lines/day',
+    contextRange: 'Range summary',
+    contextDay: '{{date}} (day)',
+    statCommits: '{{prefix}} commits',
+    statCommitsAll: 'Commits',
+    statLines: '{{prefix}} changed lines',
+    statLinesAll: 'Changed lines',
+    avgCommits: 'avg {{value}} commits/day',
+    avgLines: 'avg {{value}} lines/day',
+    headNone: 'No commits in this range',
+    headDay: '{{date}} · {{commits}}',
+    commitsCount_one: '{{count}} commit',
+    commitsCount_other: '{{count}} commits',
+    commitsNone: 'no commits',
+    empty: 'No commits on this day.',
+    months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    weekdays: ['M', '', 'W', '', 'F', '', 'S'],
+    loadError: 'Cannot load change data ({{error}}). Open this page through the <code>codelens</code> command; the data is generated with the server.',
+  },
+  loc: {
+    summary: 'Current filter <b>{{lines}}</b><total>/{{total}}</total> lines · <b>{{files}}</b><total>/{{allFiles}}</total> files · <b>{{percent}}</b> of repository',
+    blank: 'Exclude blank lines',
+    blankTitle: 'Count non-blank lines, ignoring whitespace-only lines',
+    depthLabel: 'Depth',
+    depthTitle: 'How many directory levels are expanded by default',
+    levels_one: '{{count}} level',
+    levels_other: '{{count}} levels',
+    hint: 'Click a block to zoom into that directory; the breadcrumb goes back',
+    zoomTo: 'Zoom to {{path}}',
+    crumbsMeta: '{{lines}} lines · {{percent}}% of filter',
+    statusMeta: '{{lines}} lines · {{percent}}%',
+    statusMeta_scope: '{{lines}} lines · {{percent}}% · {{scope}}',
+    files_one: '{{count}} file',
+    files_other: '{{count}} files',
+    legendOn: 'Click to exclude this category',
+    legendOff: 'Click to include this category',
+    legendValue_one: '{{lines}} lines / {{count}} file',
+    legendValue_other: '{{lines}} lines / {{count}} files',
+    empty: 'No text files to count with the current switches.',
+    loadError: 'Cannot load line data ({{error}}). Open this page through the <code>codelens</code> command; the data is generated with the server.',
+  },
+  category: {
+    test: 'Tests',
+    generated: 'Generated',
+    script: 'Scripts',
+    doc: 'Docs',
+    config: 'Config',
+    app: 'Application code',
+  },
+  profile: {
+    all: 'All',
+    web: 'Frontend / backend',
+    frontend: 'Frontend',
+    backend: 'Backend',
+  },
+};

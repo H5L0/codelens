@@ -110,6 +110,8 @@ describe('buildLoc', () => {
 
   test('[buildLoc] 应该带出分类定义与配置档名', () => {
     expect(data.categories.map((cat) => cat.id)).toContain('app');
+    // 内置分类的 labelKey 要随数据下发，页面按当前语言翻译
+    expect(data.categories.find((cat) => cat.id === 'app')?.labelKey).toBe('category.app');
     expect(data.profile).toBe('all');
     expect(data.root).toBe(dir.split(/[\\/]/).filter(Boolean).pop());
   });

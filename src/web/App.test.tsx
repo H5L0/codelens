@@ -6,6 +6,7 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { CalendarData, GroupStat, LocData } from '../core/types.js';
 import { App } from './App.js';
+import i18n from './lib/i18n.js';
 
 const stat = (commits: number, add: number, del: number): GroupStat => ({ commits, add, del });
 const groups = {
@@ -81,7 +82,9 @@ const click = async (selector: string): Promise<void> => {
   });
 };
 
-beforeEach(() => {
+beforeEach(async () => {
+  // 语言默认跟随浏览器，测试里固定成中文，断言才有确定结果
+  await i18n.changeLanguage('zh');
   // 树形图按容器尺寸布局，测试环境里给出固定尺寸
   Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 900 });
   Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get: () => 600 });

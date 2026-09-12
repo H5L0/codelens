@@ -74,7 +74,7 @@ export function parseArgs(argv: readonly string[]): Args {
     if (flag === '--exclude') {
       const value = inline ?? argv[++i];
       if (value === undefined) {
-        throw new Error('--exclude 缺少取值');
+        throw new Error('--exclude requires a value');
       }
       args.exclude.push(value);
       continue;
@@ -82,7 +82,7 @@ export function parseArgs(argv: readonly string[]): Args {
     if (STRING_FLAGS[flag]) {
       const value = inline ?? argv[++i];
       if (value === undefined) {
-        throw new Error(`${flag} 缺少取值`);
+        throw new Error(`${flag} requires a value`);
       }
       (args[STRING_FLAGS[flag]] as string | undefined) = value;
       continue;
@@ -91,16 +91,16 @@ export function parseArgs(argv: readonly string[]): Args {
       const value = inline ?? argv[++i];
       const num = Number(value);
       if (value === undefined || !Number.isFinite(num) || num < 0) {
-        throw new Error(`${flag} 需要一个非负数字，收到：${value ?? '(空)'}`);
+        throw new Error(`${flag} requires a non-negative number, got: ${value ?? '(empty)'}`);
       }
       (args[NUMBER_FLAGS[flag]] as number) = num;
       continue;
     }
     if (raw.startsWith('-') && raw !== '-') {
-      throw new Error(`未知参数：${raw}（用 --help 查看用法）`);
+      throw new Error(`unknown option: ${raw} (see --help)`);
     }
     if (args.dir !== '') {
-      throw new Error(`只接受一个目录参数，多余的是：${raw}`);
+      throw new Error(`only one directory argument is accepted, extra: ${raw}`);
     }
     args.dir = raw;
   }
@@ -108,30 +108,36 @@ export function parseArgs(argv: readonly string[]): Args {
   return args;
 }
 
+/** 选项与说明分两列对齐，英文说明统一从第 25 列开始。 */
+const FLAG_COL = 23;
+/** 示例比选项长，用更宽的一列。 */
+const EXAMPLE_COL = 35;
+
+const row = (left: string, text: string, width = FLAG_COL): string => `  ${left.padEnd(width)}${text}`;
+
 export function helpText(): string {
-  return `codelens：把 git 仓库的改动历史与代码行数可视化成本地看板
+  return `codelens: visualize a git repository's change history and lines of code in a local dashboard
 
-用法
-  codelens [目录] [选项]
+Usage
+  codelens [directory] [options]
 
-选项
-  --profile <名称|文件>  配置档，内置 ${builtinProfileNames().join('、')}，也可指向自定义 json
-  --config <文件>        配置文件，默认 <目录>/codelens.config.json
-  --days <天数>          改动日历的时间跨度，0 表示全部历史（默认 120）
-  --exclude <glob>       额外忽略的路径，可重复
-  --port <端口>          监听端口，默认 5178，被占用时向后尝试
-  --host <地址>          监听地址，默认 127.0.0.1
-  --no-open              不自动打开浏览器
-  --no-gitignore         不按 .gitignore 过滤，只跳过内置的重目录
-  --dump <目录>          只写出 data.json 与 loc.json 后退出
-  --dev                  开发模式，用 Vite 提供热更新
-  -h, --help             显示帮助
-  -v, --version          显示版本
+Options
+${row('--profile <name|file>', `Profile: built in ${builtinProfileNames().join(', ')}, or a custom json file`)}
+${row('--config <file>', 'Config file, defaults to <directory>/codelens.config.json')}
+${row('--days <days>', 'Calendar span, 0 for full history (default 120)')}
+${row('--exclude <glob>', 'Extra ignored paths, repeatable')}
+${row('--port <port>', 'Listen port, default 5178, tries the next ports when busy')}
+${row('--host <address>', 'Listen address, default 127.0.0.1')}
+${row('--no-open', 'Do not open the browser automatically')}
+${row('--no-gitignore', 'Ignore .gitignore; only built-in heavy directories are skipped')}
+${row('--dump <dir>', 'Write data.json and loc.json to <dir>, then exit')}
+${row('--dev', 'Dev mode with Vite hot reload')}
+${row('-h, --help', 'Show help')}
+${row('-v, --version', 'Show version')}
 
-示例
-  npx codelens                      统计当前目录
-  npx codelens ../my-repo           统计指定仓库
-  npx codelens --profile web        按前后端拆分改动日历
-  npx codelens --profile ./p.json   使用自定义配置档文件
-`;
+Examples
+${row('npx codelens', 'analyze the current directory', EXAMPLE_COL)}
+${row('npx codelens ../my-repo', 'analyze another repository', EXAMPLE_COL)}
+${row('npx codelens --profile web', 'split the calendar into frontend / backend', EXAMPLE_COL)}
+${row('npx codelens --profile ./p.json', 'use a custom profile file', EXAMPLE_COL)}`;
 }

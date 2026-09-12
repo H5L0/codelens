@@ -3,12 +3,13 @@
 // 左侧按周排布的日历热力格，右侧统计卡与提交列表随鼠标所在日期联动。
 // ---------------------------------------------------------------------------
 import { useMemo, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import type { CalendarData, GroupStat } from '../../core/types.js';
 import { formatNumber as f } from '../lib/format.js';
+import { useLabel } from '../lib/i18n.js';
 
 /** 日历格宽度，与 styles.css 的 --cw 一致。 */
 const CELL_W = 36;
-const MONTH_NAMES = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
 
 const ZERO: GroupStat = { commits: 0, add: 0, del: 0 };
 
@@ -37,7 +38,7 @@ function formatDate(date: Date): string {
 }
 
 /** 把日期区间对齐到整周，列数即周数。 */
-function buildLayout(range: { min: string; max: string }): CalendarLayout {
+function buildLayout(range: { min: string; max: string }, months: readonly string[]): CalendarLayout {
   if (!range.min || !range.max) {
     return EMPTY_LAYOUT;
   }
@@ -48,7 +49,7 @@ function buildLayout(range: { min: string; max: string }): CalendarLayout {
 
   const weeks: Array<Array<string | undefined>> = [];
   let week: Array<string | undefined> = new Array<string | undefined>(7).fill(undefined);
-  const months: MonthLabel[] = [];
+  const labels: MonthLabel[] = [];
   let lastMonth = -1;
   for (let cursor = new Date(startMonday), i = 0; cursor <= endSunday; cursor.setDate(cursor.getDate() + 1), i += 1) {
     const dow = (cursor.getDay() + 6) % 7;
@@ -58,12 +59,12 @@ function buildLayout(range: { min: string; max: string }): CalendarLayout {
     }
     week[dow] = formatDate(cursor);
     if (cursor.getMonth() !== lastMonth && cursor.getDate() <= 7) {
-      months.push({ col: weeks.length, name: MONTH_NAMES[cursor.getMonth()] });
+      labels.push({ col: weeks.length, name: months[cursor.getMonth()] ?? '' });
       lastMonth = cursor.getMonth();
     }
   }
   weeks.push(week);
-  return { weeks, months };
+  return { weeks, months: labels };
 }
 
 export interface CalendarViewProps {
@@ -75,15 +76,22 @@ export interface CalendarViewProps {
 }
 
 export function CalendarView({ data, error, mode, hidden }: CalendarViewProps) {
+  const { t } = useTranslation();
+  const label = useLabel();
   const [hoverDate, setHoverDate] = useState<string | undefined>(undefined);
-  const layout = useMemo(() => (data ? buildLayout(data.range) : EMPTY_LAYOUT), [data]);
+
+  // 月份与星期的短标签放在文案里，日历格子很窄，用的是固定短名
+  const months = t('calendar.months', { returnObjects: true }) as unknown as string[];
+  const weekdays = t('calendar.weekdays', { returnObjects: true }) as unknown as string[];
+  const layout = useMemo(() => (data ? buildLayout(data.range, months) : EMPTY_LAYOUT), [data, months]);
 
   const maxVal = Math.max(1, data?.maxVal ?? 1);
   const barW = (value: number): number =>
     value <= 0 ? 0 : Math.max(3, Math.round(Math.sqrt(value / maxVal) * CELL_W));
 
   const days = data?.totals.days ?? 0;
-  const cards = data && data.groups.length > 0 ? data.groups : [{ id: 'all', label: '', hue: 214, sat: 58 }];
+  const cards: Array<{ id: string; label: string }> =
+    data && data.groups.length > 0 ? data.groups.map((group) => ({ id: group.id, label: label(group) })) : [{ id: 'all', label: '' }];
   const hoverDay = data && hoverDate ? data.days[hoverDate] : undefined;
   const live = hoverDate !== undefined;
   const commitDate = hoverDate ?? data?.range.max ?? '';
@@ -97,13 +105,9 @@ export function CalendarView({ data, error, mode, hidden }: CalendarViewProps) {
         <div className="card">
           <div className="calendar-wrap">
             <div className="dow-labels">
-              <span>一</span>
-              <span />
-              <span>三</span>
-              <span />
-              <span>五</span>
-              <span />
-              <span>日</span>
+              {weekdays.map((name, i) => (
+                <span key={i}>{name}</span>
+              ))}
             </div>
             <div className="grid-area">
               <div className="month-row" style={{ gridTemplateColumns: `repeat(${layout.weeks.length}, var(--cw))` }}>
@@ -150,35 +154,43 @@ export function CalendarView({ data, error, mode, hidden }: CalendarViewProps) {
           <div className="legend-row">
             <div className="legend-item">
               <span className="sw" style={{ background: 'var(--green)' }} />
-              新增行（上条）
+              {t('calendar.add')}
             </div>
             <div className="legend-item">
               <span className="sw" style={{ background: 'var(--red)' }} />
-              删除行（下条）
+              {t('calendar.del')}
             </div>
             <div className="legend-item" style={{ color: 'var(--muted)' }}>
-              {`条宽 = 行数量级，平方根刻度，峰值 ${f(maxVal)} 行/天`}
+              {t('calendar.scale', { max: f(maxVal) })}
             </div>
           </div>
         </div>
 
-        <div className={`stats-ctx${live ? ' live' : ''}`}>{hoverDate ? `${hoverDate} 当日` : '区间汇总'}</div>
+        <div className={`stats-ctx${live ? ' live' : ''}`}>
+          {hoverDate ? t('calendar.contextDay', { date: hoverDate }) : t('calendar.contextRange')}
+        </div>
         <div className={`stats${live ? ' live' : ''}`} style={{ gridTemplateColumns: `repeat(${cards.length * 2}, 1fr)` }}>
           {cards.map((group) => {
             const stat = statOf(group.id);
-            const prefix = group.label;
+            const named = group.label !== '';
             return [
               <div className="stat" key={`${group.id}-commits`}>
-                <div className="k">{`${prefix}提交`}</div>
+                <div className="k">
+                  {named ? t('calendar.statCommits', { prefix: group.label }) : t('calendar.statCommitsAll')}
+                </div>
                 <div className="v">{f(stat.commits)}</div>
-                <div className="s">{days > 0 ? `日均 ${(stat.commits / days).toFixed(1)} 次` : '—'}</div>
+                <div className="s">{days > 0 ? t('calendar.avgCommits', { value: (stat.commits / days).toFixed(1) }) : '—'}</div>
               </div>,
               <div className="stat" key={`${group.id}-lines`}>
-                <div className="k">{`${prefix}改动行`}</div>
+                <div className="k">
+                  {named ? t('calendar.statLines', { prefix: group.label }) : t('calendar.statLinesAll')}
+                </div>
                 <div className="v">
                   <span className="plus">{`+${f(stat.add)}`}</span> <span className="minus">{`-${f(stat.del)}`}</span>
                 </div>
-                <div className="s">{days > 0 ? `日均 ${f(Math.round((stat.add + stat.del) / days))} 行` : '—'}</div>
+                <div className="s">
+                  {days > 0 ? t('calendar.avgLines', { value: f(Math.round((stat.add + stat.del) / days)) }) : '—'}
+                </div>
               </div>,
             ];
           })}
@@ -187,12 +199,17 @@ export function CalendarView({ data, error, mode, hidden }: CalendarViewProps) {
         <div className="commits-card">
           <div className={`commits-head${live ? ' live' : ''}`}>
             {commitDate === ''
-              ? '区间内没有提交'
-              : `${commitDate} · ${commitDay ? `${commitDay.commits.length} 个提交` : '无提交'}`}
+              ? t('calendar.headNone')
+              : t('calendar.headDay', {
+                  date: commitDate,
+                  commits: commitDay
+                    ? t('calendar.commitsCount', { count: commitDay.commits.length })
+                    : t('calendar.commitsNone'),
+                })}
           </div>
           <div className="commit-list">
             {!commitDay || commitDay.commits.length === 0 ? (
-              <div className="commit-empty">当日没有提交记录。</div>
+              <div className="commit-empty">{t('calendar.empty')}</div>
             ) : (
               commitDay.commits.map((commit) => {
                 const total = commit.groups.all ?? ZERO;
@@ -213,9 +230,7 @@ export function CalendarView({ data, error, mode, hidden }: CalendarViewProps) {
         </div>
       </div>
       <div className="load-error" hidden={error === undefined}>
-        {`无法读取改动数据（${error ?? ''}）。请通过 `}
-        <code>codelens</code>
-        {` 启动页面后访问，数据由它随服务一起生成。`}
+        <Trans i18nKey="calendar.loadError" values={{ error: error ?? '' }} components={{ code: <code /> }} />
       </div>
     </section>
   );
