@@ -79,6 +79,19 @@ describe('squarify', () => {
     expect(squarify(items, { x: 0, y: 0, w: 0, h: 0 })).toEqual([]);
     expect(squarify([item(0)], box)).toEqual([]);
   });
+
+  // 布局的取舍全在「方块接近正方形」上：换成按比例切条也能满足上面几条不变量，
+  // 但长条会细到看不清、过不了绘制时的最小尺寸过滤，所以形状本身要单独守住。
+  const ratios = (): number[] => placed.map((entry) => Math.max(entry.rect.w / entry.rect.h, entry.rect.h / entry.rect.w));
+
+  test('[squarify] 平均长宽比应该保持在可读范围', () => {
+    const mean = ratios().reduce((total, ratio) => total + ratio, 0) / placed.length;
+    expect(mean).toBeLessThan(4);
+  });
+
+  test('[squarify] 大块不应该退化成细条', () => {
+    expect(Math.max(...ratios())).toBeLessThan(12);
+  });
 });
 
 describe('layoutTreemap', () => {

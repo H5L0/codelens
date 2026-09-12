@@ -23,7 +23,7 @@ function worstRatio(areas: readonly number[], side: number): number {
   return Math.max((s2 * max) / t2, t2 / (s2 * min));
 }
 
-export interface Placed {
+interface Placed {
   node: TreeNode;
   rect: Rect;
 }
@@ -103,7 +103,7 @@ export interface PaintedNode {
   children: PaintedNode[];
 }
 
-export interface LayoutOptions {
+interface LayoutOptions {
   w: number;
   h: number;
   /** 已经展开的目录路径。 */
@@ -123,15 +123,16 @@ export function layoutTreemap(root: TreeNode, opts: LayoutOptions): PaintedNode[
     }
     const out: PaintedNode[] = [];
     for (const placed of squarify(items, rect)) {
+      const { node } = placed;
+      const box = placed.rect;
+      if (box.w < MIN_PX || box.h < MIN_PX) {
+        // 先按尺寸过滤再计入配额：否则一堆碎块会把配额吃光，大块反而画不出来
+        continue;
+      }
       if (drawn >= cap) {
         break;
       }
       drawn += 1;
-      const { node } = placed;
-      const box = placed.rect;
-      if (box.w < MIN_PX || box.h < MIN_PX) {
-        continue;
-      }
       const open = node.isDir && visibleChildren(node).length > 0 && opts.expanded.has(node.path);
       const headH = box.w >= 30 && box.h >= 16 ? HEAD_H : 0;
       out.push({

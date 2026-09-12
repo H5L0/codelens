@@ -6,7 +6,7 @@ import type { LocFileEntry, TreeNode } from '../../core/types.js';
 
 export type Metric = 'lines' | 'nonBlank';
 
-export interface Tree {
+interface Tree {
   root: TreeNode;
   /** 路径到节点的索引，点方块放大时按路径查找。 */
   index: Map<string, TreeNode>;

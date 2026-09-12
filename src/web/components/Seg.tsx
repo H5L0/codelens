@@ -5,12 +5,12 @@
 // ---------------------------------------------------------------------------
 import { useLayoutEffect, useRef } from 'react';
 
-export interface SegOption {
+interface SegOption {
   value: string;
   label: string;
 }
 
-export interface SegProps {
+interface SegProps {
   options: readonly SegOption[];
   value: string;
   onChange: (value: string) => void;
@@ -41,13 +41,14 @@ export function Seg({ options, value, onChange, hidden = false }: SegProps) {
   }, [value, options.length, hidden]);
 
   return (
-    <div className="seg" ref={segRef} hidden={hidden}>
-      <span className="seg-pill" ref={pillRef} />
+    <div className="seg" role="group" ref={segRef} hidden={hidden}>
+      <span className="seg-pill" ref={pillRef} aria-hidden="true" />
       {options.map((option) => (
         <button
           key={option.value}
           type="button"
           className={option.value === value ? 'active' : ''}
+          aria-pressed={option.value === value}
           onClick={() => onChange(option.value)}
         >
           {option.label}

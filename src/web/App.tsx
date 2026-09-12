@@ -66,8 +66,14 @@ export function App() {
         </div>
       </header>
       <main>
-        <CalendarView data={calendar.data} error={calendar.error} mode={mode} hidden={!isCalendar} />
-        <LocView data={loc.data} error={loc.error} hidden={isCalendar} />
+        <CalendarView
+          data={calendar.data}
+          error={calendar.error}
+          onRetry={calendar.reload}
+          mode={mode}
+          hidden={!isCalendar}
+        />
+        <LocView data={loc.data} error={loc.error} onRetry={loc.reload} hidden={isCalendar} />
       </main>
     </>
   );
