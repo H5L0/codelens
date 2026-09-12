@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 export const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-/** 前端资源目录：开发模式用 Vite 的源码根，其余情况用构建产物。 */
-export function webDir(dev: boolean): string {
-  return dev ? resolve(packageRoot, 'src/web') : resolve(packageRoot, 'dist', 'web');
+/** 前端资源目录：构建产物所在位置。 */
+export function webDir(): string {
+  return resolve(packageRoot, 'dist', 'web');
 }

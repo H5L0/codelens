@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 import { builtinProfileNames } from '../core/profile.js';
 
-export interface Args {
+interface Args {
   dir: string;
   profile: string;
   config: string | undefined;
@@ -43,6 +43,9 @@ const BOOL_FLAGS: Record<string, [keyof Args, boolean]> = {
   '--version': ['version', true],
 };
 
+/** 主机名、IPv4、IPv6（含方括号与 `%` 作用域）都用得到的字符。 */
+const HOST_RE = /^[A-Za-z0-9._:[\]%-]+$/;
+
 export function parseArgs(argv: readonly string[]): Args {
   const args: Args = {
     dir: '',
@@ -73,7 +76,7 @@ export function parseArgs(argv: readonly string[]): Args {
     }
     if (flag === '--exclude') {
       const value = inline ?? argv[++i];
-      if (value === undefined) {
+      if (value === undefined || value === '') {
         throw new Error('--exclude requires a value');
       }
       args.exclude.push(value);
@@ -81,7 +84,7 @@ export function parseArgs(argv: readonly string[]): Args {
     }
     if (STRING_FLAGS[flag]) {
       const value = inline ?? argv[++i];
-      if (value === undefined) {
+      if (value === undefined || value === '') {
         throw new Error(`${flag} requires a value`);
       }
       (args[STRING_FLAGS[flag]] as string | undefined) = value;
@@ -90,8 +93,8 @@ export function parseArgs(argv: readonly string[]): Args {
     if (NUMBER_FLAGS[flag]) {
       const value = inline ?? argv[++i];
       const num = Number(value);
-      if (value === undefined || !Number.isFinite(num) || num < 0) {
-        throw new Error(`${flag} requires a non-negative number, got: ${value ?? '(empty)'}`);
+      if (value === undefined || value === '' || !Number.isInteger(num) || num < 0) {
+        throw new Error(`${flag} requires a whole number >= 0, got: ${value ?? '(empty)'}`);
       }
       (args[NUMBER_FLAGS[flag]] as number) = num;
       continue;
@@ -105,10 +108,18 @@ export function parseArgs(argv: readonly string[]): Args {
     args.dir = raw;
   }
 
+  if (args.port > 65535) {
+    throw new Error(`--port must be between 0 and 65535, got: ${args.port}`);
+  }
+  // 地址只允许主机名与 IP 里常见的字符，避免把奇怪的值一路带进 URL 与启动命令
+  if (!HOST_RE.test(args.host)) {
+    throw new Error(`--host must be an address or hostname, got: ${args.host}`);
+  }
+
   return args;
 }
 
-/** 选项与说明分两列对齐，英文说明统一从第 25 列开始。 */
+/** 选项与说明分两列对齐，说明统一从这里开始的列。 */
 const FLAG_COL = 23;
 /** 示例比选项长，用更宽的一列。 */
 const EXAMPLE_COL = 35;

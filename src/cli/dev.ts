@@ -7,12 +7,12 @@ import { packageRoot } from './paths.js';
 import { createApiMiddleware } from './server.js';
 import type { Payloads } from './server.js';
 
-export interface DevHandle {
+interface DevHandle {
   url: string;
   close: () => Promise<void>;
 }
 
-export interface DevOptions {
+interface DevOptions {
   host: string;
   port: number;
 }

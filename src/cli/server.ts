@@ -45,10 +45,26 @@ function sendText(res: ServerResponse, status: number, body: string): void {
   res.end(body);
 }
 
+/**
+ * 取出请求的路径。畸形 URL（例如 `/%`）只该让这一个请求失败，
+ * 不能让整个进程崩掉，所以这里返回 undefined 交给调用方回 400。
+ */
+function pathnameOf(req: IncomingMessage): string | undefined {
+  try {
+    return new URL(req.url ?? '/', 'http://localhost').pathname;
+  } catch {
+    return undefined;
+  }
+}
+
 /** 数据接口：/api/data.json 是改动日历，/api/loc.json 是行数清单。 */
 export function createApiMiddleware(payloads: Payloads): Middleware {
   return (req, res, next) => {
-    const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+    const pathname = pathnameOf(req);
+    if (pathname === undefined) {
+      sendText(res, 400, 'bad request');
+      return;
+    }
     if (pathname === '/api/data.json' || pathname === '/data.json') {
       sendJson(res, payloads.data);
       return;
@@ -64,7 +80,18 @@ export function createApiMiddleware(payloads: Payloads): Middleware {
 /** 静态资源：把构建产物目录当作站点根。 */
 export function createStaticMiddleware(webDir: string): Middleware {
   return (req, res, next) => {
-    const pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://localhost').pathname);
+    const rawPath = pathnameOf(req);
+    if (rawPath === undefined) {
+      sendText(res, 400, 'bad request');
+      return;
+    }
+    let pathname: string;
+    try {
+      pathname = decodeURIComponent(rawPath);
+    } catch {
+      sendText(res, 400, 'bad request: malformed percent-encoding in the url');
+      return;
+    }
     const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
     let filePath = resolve(webDir, rel);
     if (filePath !== webDir && !filePath.startsWith(webDir + sep)) {
@@ -110,13 +137,28 @@ export function compose(middlewares: readonly Middleware[]): Middleware {
   };
 }
 
-export interface ServerHandle {
+interface ServerHandle {
   port: number;
   url: string;
   close: () => void;
 }
 
-export interface ListenOptions {
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
+
+/** 是否只有本机能访问；否则页面对同网段的机器也是开放的。 */
+export function isLoopbackHost(host: string): boolean {
+  return LOOPBACK_HOSTS.has(host);
+}
+
+/** 打印用的地址：监听全部网卡时换成本机名，IPv6 补上方括号。 */
+export function displayHost(host: string): string {
+  if (host === '0.0.0.0' || host === '::' || host === '[::]') {
+    return 'localhost';
+  }
+  return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+}
+
+interface ListenOptions {
   host: string;
   port: number;
   /** 端口被占用时最多向后尝试多少个端口。 */
@@ -142,13 +184,15 @@ export function startServer(middleware: Middleware, opts: ListenOptions): Promis
       server.once('error', onError);
       server.listen(port, opts.host, () => {
         server.removeListener('error', onError);
-        done(port);
+        // port 为 0 时由系统分配，要取真实端口，否则打印出来的地址打不开
+        const address = server.address();
+        done(typeof address === 'object' && address !== null ? address.port : port);
       });
     });
 
   return listen(opts.port, opts.attempts ?? 10).then((port) => ({
     port,
-    url: `http://${opts.host === '0.0.0.0' ? 'localhost' : opts.host}:${port}/`,
+    url: `http://${displayHost(opts.host)}:${port}/`,
     close: () => server.close(),
   }));
 }

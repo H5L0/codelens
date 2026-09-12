@@ -7,15 +7,18 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { buildCalendar, emptyCalendar, isGitRepo } from '../core/calendar.js';
-import { buildLoc } from '../core/loc.js';
+import { buildLoc, emptyLoc } from '../core/loc.js';
+import type { LocResult } from '../core/loc.js';
 import { loadProfile } from '../core/profile.js';
 import type { CalendarData, Profile } from '../core/types.js';
 import { helpText, parseArgs } from './args.js';
 import { startDevServer } from './dev.js';
 import { packageRoot, webDir } from './paths.js';
-import { compose, createApiMiddleware, createStaticMiddleware, startServer } from './server.js';
+import { compose, createApiMiddleware, createStaticMiddleware, isLoopbackHost, startServer } from './server.js';
 
 const f = (n: number): string => n.toLocaleString();
+
+const message = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
 function version(): string {
   const pkg = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as { version?: string };
@@ -49,16 +52,26 @@ function log(label: string, text: string): void {
 }
 
 /** git 不可用或目录不是仓库时保留空日历，让行数视图仍能打开。 */
-function readCalendar(root: string, profile: Profile, days: number): CalendarData {
+async function readCalendar(root: string, profile: Profile, days: number): Promise<CalendarData> {
   if (!isGitRepo(root)) {
     console.warn(`${tag('warn')}directory is not inside a git repository, the calendar will be empty`);
     return emptyCalendar(root, profile);
   }
   try {
-    return buildCalendar(root, profile, { days });
+    return await buildCalendar(root, profile, { days });
   } catch (err) {
-    console.warn(`${tag('warn')}failed to read git history, the calendar will be empty: ${err instanceof Error ? err.message : String(err)}`);
+    console.warn(`${tag('warn')}failed to read git history, the calendar will be empty: ${message(err)}`);
     return emptyCalendar(root, profile);
+  }
+}
+
+/** 行数统计失败时保留空清单，日历视图仍能打开。 */
+async function readLoc(root: string, profile: Profile, useGitignore: boolean): Promise<LocResult> {
+  try {
+    return await buildLoc(root, profile, { useGitignore });
+  } catch (err) {
+    console.warn(`${tag('warn')}failed to count lines, the line view will be empty: ${message(err)}`);
+    return { data: emptyLoc(root, profile), scan: { entries: [], mode: 'walk' } };
   }
 }
 
@@ -67,7 +80,14 @@ function launchBrowser(url: string): void {
     process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] :
     process.platform === 'darwin' ? ['open', [url]] :
     ['xdg-open', [url]];
-  spawn(cmd[0] as string, cmd[1] as string[], { stdio: 'ignore', detached: true }).unref();
+  try {
+    const child = spawn(cmd[0] as string, cmd[1] as string[], { stdio: 'ignore', detached: true });
+    // 没有可用的打开方式（例如 linux 上缺 xdg-open）时不该抛未捕获异常
+    child.on('error', () => {});
+    child.unref();
+  } catch {
+    // 打不开浏览器不影响服务本身
+  }
 }
 
 async function main(): Promise<void> {
@@ -97,14 +117,17 @@ async function main(): Promise<void> {
   log('repo', root);
   log('profile', `${profile.name} (${profile.label})${profile.configPath ? ` · ${profile.configPath}` : ''}`);
 
-  const loc = buildLoc(root, profile, { useGitignore: args.useGitignore });
+  const loc = await readLoc(root, profile, args.useGitignore);
   const scanLabel = loc.scan.mode === 'git' ? 'git index, filtered by .gitignore' : 'directory walk';
   log('files', `${f(loc.data.totals.files)} files · ${f(loc.data.totals.lines)} lines (${scanLabel})`);
+  if (loc.data.skipped.unreadable > 0) {
+    log('warn', `${f(loc.data.skipped.unreadable)} files could not be read and were skipped`);
+  }
   if (profile.groups.length > 0) {
     log('groups', profile.groups.map((group) => `${group.label}=${group.match.join(' ')}`).join('  '));
   }
 
-  const calendar = readCalendar(root, profile, args.days);
+  const calendar = await readCalendar(root, profile, args.days);
   log(
     'calendar',
     calendar.range.min
@@ -124,6 +147,10 @@ async function main(): Promise<void> {
 
   const payloads = { data: JSON.stringify(calendar), loc: JSON.stringify(loc.data) };
 
+  if (!isLoopbackHost(args.host)) {
+    console.warn(`${tag('warn')}listening on ${args.host}, the dashboard is reachable from other machines`);
+  }
+
   if (args.dev) {
     const dev = await startDevServer(payloads, { host: args.host, port: args.port });
     log('server', `${dev.url} (Vite dev mode, front-end changes apply instantly)`);
@@ -136,7 +163,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const dir = webDir(false);
+  const dir = webDir();
   if (!exists(join(dir, 'index.html'))) {
     throw new Error(`front-end build not found at ${dir}; run npm run build or use --dev`);
   }
@@ -155,6 +182,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  console.error(`${tag('error')}${err instanceof Error ? err.message : String(err)}`);
+  console.error(`${tag('error')}${message(err)}`);
   process.exit(1);
 });
