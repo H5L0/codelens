@@ -34,7 +34,7 @@ describe('i18n', () => {
     await i18n.changeLanguage('zh');
     expect(i18n.t('view.calendar')).toBe('改动日历');
     expect(i18n.t('calendar.headDay', { date: '2026-01-05', commits: i18n.t('calendar.commitsCount', { count: 1 }) })).toBe(
-      '2026-01-05 · 1 个提交',
+      '2026-01-05，1 个提交',
     );
     expect(i18n.t('loc.legendValue', { lines: '10', count: 1 })).toBe('10 行 / 1 文件');
   });

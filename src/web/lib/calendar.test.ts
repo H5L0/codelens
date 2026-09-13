@@ -119,7 +119,7 @@ describe('buildLayout', () => {
     expect(layout.weeks).toHaveLength(1);
     expect(layout.weeks[0][0]).toBe('2026-01-05');
     expect(layout.weeks[0][6]).toBe('2026-01-11');
-    // 补出来的整周也要有格子：窗口外的日子照常画出来，由视图决定底色
+    // 补出来的整周也要有格子：窗口外的日子照常画出来，格子本身不做区分
     expect(layout.weeks[0][1]).toBe('2026-01-06');
     expect(layout.weeks[0][3]).toBe('2026-01-08');
     expect(layout.weeks[0][4]).toBe('2026-01-09');

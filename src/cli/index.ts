@@ -115,23 +115,27 @@ async function main(): Promise<void> {
 
   console.log(`codelens ${version()}`);
   log('repo', root);
-  log('profile', `${profile.name} (${profile.label})${profile.configPath ? ` · ${profile.configPath}` : ''}`);
+  log('profile', `${profile.name} (${profile.label})`);
+  if (profile.configPath) {
+    log('config', profile.configPath);
+  }
 
   const loc = await readLoc(root, profile, args.useGitignore);
   const scanLabel = loc.scan.mode === 'git' ? 'git index, filtered by .gitignore' : 'directory walk';
-  log('files', `${f(loc.data.totals.files)} files · ${f(loc.data.totals.lines)} lines (${scanLabel})`);
+  log('files', `${f(loc.data.totals.files)} files, ${f(loc.data.totals.lines)} lines (${scanLabel})`);
   if (loc.data.skipped.unreadable > 0) {
     log('warn', `${f(loc.data.skipped.unreadable)} files could not be read and were skipped`);
   }
-  if (profile.groups.length > 0) {
-    log('groups', profile.groups.map((group) => `${group.label}=${group.match.join(' ')}`).join('  '));
-  }
+  // 分组一行一个，规则长了也不会挤成一条
+  profile.groups.forEach((group, index) => {
+    log(index === 0 ? 'groups' : '', `${group.label}=${group.match.join(' ')}`);
+  });
 
   const calendar = await readCalendar(root, profile, args.days);
   log(
     'calendar',
     calendar.range.min
-      ? `${calendar.range.min} ~ ${calendar.range.max} · ${calendar.totals.days} days with commits`
+      ? `${calendar.range.min} ~ ${calendar.range.max} (${calendar.totals.days} days with commits)`
       : 'no commits in this range',
   );
 

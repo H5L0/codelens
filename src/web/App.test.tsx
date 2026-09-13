@@ -176,25 +176,32 @@ describe('App', () => {
     expect([...all('.seg')[0].querySelectorAll('button')].map((b) => b.textContent)).toEqual(['改动日历', '代码行数']);
     expect([...all('.seg')[1].querySelectorAll('button')].map((b) => b.textContent)).toEqual(['全部', '前端', '后端']);
     expect(text('h1 span:first-child')).toBe('代码改动日历');
-    expect(text('h1 .range')).toBe('2026-01-05 ~ 2026-01-06 · 2 天有提交');
+    expect(text('h1 .range')).toBe('2026年1月5日 ~ 2026年1月6日（2 天有提交）');
     expect(container.querySelector('h1 .range')?.hasAttribute('hidden')).toBe(false);
   });
 
-  test('[App] 日历一屏能放几周就铺几周，提交范围外的格子更白', async () => {
+  test('[App] 日历窗口按容器宽度铺满，第一次提交之前的周也照常铺格子', async () => {
     await mount();
     expect(all('.grid .row')).toHaveLength(7);
-    // 容器 900 宽，36px 的格子放得下 22 列；数据从 1 月 5 日那一周起只有三周，就只铺这三周
-    expect(all('.grid .cell')).toHaveLength(21);
+    // 容器 900 宽，36px 的格子放得下 22 列；数据只有三周，窗口照样铺满 22 列，最右一列停在数据末尾
+    expect(all('.grid .cell')).toHaveLength(22 * 7);
     expect(all('.grid .cell.pad')).toHaveLength(0);
-    expect(all('.grid .cell')[0].getAttribute('data-date')).toBe('2026-01-05');
-    // 最后一次提交（1 月 6 日）之后到 1 月 25 日都算没有数据
-    expect(all('.grid .cell.out')).toHaveLength(19);
+    const dates = all('.grid .cell').map((cell) => cell.getAttribute('data-date') ?? '');
+    expect(new Set(dates).size).toBe(22 * 7);
+    expect(dates[0]).toBe('2025-08-25');
+    expect(dates.at(-1)).toBe('2026-01-25');
+    // 第一次提交（1 月 5 日）之前的格子也铺出来，画得更深且不参与悬浮放大
+    const outCell = container.querySelector('.grid .cell[data-date="2025-08-25"]');
+    expect(outCell?.classList.contains('out')).toBe(true);
+    expect(outCell?.querySelector('.hbar.add')?.getAttribute('style')).toContain('0px');
+    // 区间外的 152 天都标成 out，区间内的两天照常
+    expect(all('.grid .cell.out')).toHaveLength(22 * 7 - 2);
     expect(container.querySelector('.grid .cell[data-date="2026-01-05"]')?.classList.contains('out')).toBe(false);
-    expect(all('.month-label').map((el) => el.textContent)).toEqual(['1月']);
-    expect(text('.month-row')).toBe('1月');
-    // 顶部一行：左边是显示的时间范围，右边是两条色带的图例
-    expect(text('.cal-range')).toBe('2026-01-05 ~ 2026-01-06');
-    expect(all('.cal-legend .legend-item').map((el) => el.textContent)).toEqual(['新增行（上条）', '删除行（下条）']);
+    // 月份标签跟着整个窗口走，从窗口首月排到数据所在的 1 月
+    expect(all('.month-label').map((el) => el.textContent)).toEqual(['8月', '9月', '10月', '11月', '12月', '1月']);
+    // 顶部一行：左边是显示的时间范围（收在数据范围内、按本地写法），右边是两条色带的图例
+    expect(text('.cal-range')).toBe('2026年1月5日 ~ 2026年1月6日');
+    expect(all('.cal-legend .legend-item').map((el) => el.textContent)).toEqual(['新增行', '删除行']);
     // 提交全在一屏里，不出现拖动条
     expect(container.querySelector('.scrub')).toBeNull();
     const day = container.querySelector('.grid .cell[data-date="2026-01-05"]');
@@ -202,15 +209,20 @@ describe('App', () => {
     expect(day?.querySelector('.hbar.del')?.getAttribute('style')).toContain('15px');
   });
 
+  test('[App] 日历左侧列出周一到周日七天', async () => {
+    await mount();
+    expect(all('.dow-labels span').map((el) => el.textContent)).toEqual(['一', '二', '三', '四', '五', '六', '日']);
+  });
+
   test('[App] 日历格子应该可以用键盘读到当天信息', async () => {
     await mount();
     const cells = all('.grid .cell');
     expect(cells.every((cell) => cell.tagName === 'BUTTON')).toBe(true);
     expect(container.querySelector('.grid .cell[data-date="2026-01-05"]')?.getAttribute('aria-label')).toBe(
-      '2026-01-05，1 个提交，新增 30 行、删除 5 行',
+      '2026年1月5日，1 个提交，新增 30 行、删除 5 行',
     );
     expect(container.querySelector('.grid .cell[data-date="2026-01-06"]')?.getAttribute('aria-label')).toBe(
-      '2026-01-06，无提交，新增 0 行、删除 0 行',
+      '2026年1月6日，无提交，新增 0 行、删除 0 行',
     );
     // 整块网格只有一个格子能被 Tab 停住，默认停在最后一次提交那天
     const tabbable = cells.filter((cell) => cell.getAttribute('tabindex') === '0');
@@ -230,8 +242,8 @@ describe('App', () => {
     vi.setSystemTime(new Date('2026-02-10T12:00:00'));
     await mount();
     expect(all('.grid .cell.today')).toHaveLength(0);
-    // 窗口停在最后一次提交那一周：2026-01-05 ~ 2026-01-11，只有这一周
-    expect(all('.grid .cell')).toHaveLength(7);
+    // 窗口停在最后一次提交那一周（2026-01-05 ~ 2026-01-11），左边照常往前铺满一屏
+    expect(all('.grid .cell')).toHaveLength(22 * 7);
     expect(all('.grid .cell').at(-1)?.getAttribute('data-date')).toBe('2026-01-11');
   });
 
@@ -245,11 +257,11 @@ describe('App', () => {
       '后端累计改动行',
     ]);
     expect(all('.stat .v')[0].textContent).toBe('2');
-    expect(all('.stat .s')[0].textContent).toBe('日均 1.0 次 · 峰值 1 次/天');
-    expect(all('.stat .s')[1].textContent).toBe('日均 12 行 · 峰值 30 行/天');
+    expect(all('.stat .s')[0].textContent).toBe('日均 1.0 次，峰值 1 次/天');
+    expect(all('.stat .s')[1].textContent).toBe('日均 12 行，峰值 30 行/天');
     // 区间汇总的标题已经去掉，口径由卡片的“累计”标题表达
     expect(container.querySelector('.stats-ctx')).toBeNull();
-    expect(text('.commits-head')).toBe('2026-01-06 · 无提交');
+    expect(text('.commits-head')).toBe('2026年1月6日，无提交');
   });
 
   test('[App] 鼠标移到某天应该切换成当日统计与提交列表', async () => {
@@ -265,7 +277,7 @@ describe('App', () => {
     await hover(cell);
     expect(all('.stats')[0].classList.contains('live')).toBe(true);
     expect(all('.stat .k').map((el) => el.textContent)).toEqual(['前端提交', '前端改动行', '后端提交', '后端改动行']);
-    expect(text('.commits-head')).toBe('2026-01-05 · 1 个提交');
+    expect(text('.commits-head')).toBe('2026年1月5日，1 个提交');
     expect(text('.commit .hash')).toBe('abc1234');
     expect(text('.commit .subj')).toBe('第一个提交');
     expect(text('.commit .nums')).toBe('+30 -5');
@@ -297,16 +309,16 @@ describe('App', () => {
     await act(async () => {
       first.focus();
     });
-    expect(text('.commits-head')).toBe('2026-01-05 · 1 个提交');
+    expect(text('.commits-head')).toBe('2026年1月5日，1 个提交');
     await act(async () => {
       first.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     });
-    expect(text('.commits-head')).toBe('2026-01-06 · 无提交');
+    expect(text('.commits-head')).toBe('2026年1月6日，无提交');
     // 到达最后一次提交后不再移动
     await act(async () => {
       second.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     });
-    expect(text('.commits-head')).toBe('2026-01-06 · 无提交');
+    expect(text('.commits-head')).toBe('2026年1月6日，无提交');
   });
 
   test('[App] 只看某个分组时提交列表应该用同一口径', async () => {
@@ -315,7 +327,7 @@ describe('App', () => {
     await hover('.grid .cell[data-date="2026-01-05"]');
     expect(all('.stat .v')[0].textContent).toBe('1');
     expect(text('.commit .nums')).toBe('+10 -2');
-    expect(text('.commits-head')).toBe('2026-01-05 · 前端 1 个提交');
+    expect(text('.commits-head')).toBe('2026年1月5日，前端 1 个提交');
   });
 
   test('[App] 切换到代码行数视图应该隐藏日历并展示树形图', async () => {
@@ -336,8 +348,8 @@ describe('App', () => {
   test('[App] 行数视图应该给出汇总、面包屑与分类图例', async () => {
     await mount();
     await click('.seg button:nth-of-type(2)');
-    expect(text('.loc-summary')).toBe('当前筛选 25/30 行 · 2/3 个文件 · 覆盖全仓库 83.3%');
-    expect(text('.tm-crumbs')).toBe('demo25 行 · 占筛选总量 100.0%');
+    expect(text('.loc-summary')).toBe('当前筛选 25/30 行，2/3 个文件，覆盖全仓库 83.3%');
+    expect(text('.tm-crumbs')).toBe('demo25 行，占筛选总量 100.0%');
     expect(all('.tm-legend .lg')).toHaveLength(3);
     // 图例按未筛选前的行数排：测试 15 行 > 应用代码 10 行 > 文档 5 行
     expect(all('.tm-legend .lg-name').map((el) => el.textContent)).toEqual(['测试', '应用代码', '文档']);
@@ -371,13 +383,13 @@ describe('App', () => {
     expect(text('.tm-crumbs .crumb.preview')).toBe('src');
 
     await click('.tm-node[data-path="src"]');
-    expect(text('.tm-crumbs')).toBe('demo/src25 行 · 占筛选总量 100.0%');
+    expect(text('.tm-crumbs')).toBe('demo/src25 行，占筛选总量 100.0%');
     expect(all('.tm-crumbs button.crumb')).toHaveLength(1);
 
     await act(async () => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     });
-    expect(text('.tm-crumbs')).toBe('demo25 行 · 占筛选总量 100.0%');
+    expect(text('.tm-crumbs')).toBe('demo25 行，占筛选总量 100.0%');
     expect(all('.tm-crumbs button.crumb')).toHaveLength(0);
   });
 
@@ -389,14 +401,14 @@ describe('App', () => {
     await act(async () => {
       node?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     });
-    expect(text('.tm-crumbs')).toBe('demo/src25 行 · 占筛选总量 100.0%');
+    expect(text('.tm-crumbs')).toBe('demo/src25 行，占筛选总量 100.0%');
   });
 
   test('[App] 图例开关与显示层级开关应该改变树形图', async () => {
     await mount();
     await click('.seg button:nth-of-type(2)');
     await click('.tm-legend .lg[data-cat="test"]');
-    expect(text('.loc-summary')).toBe('当前筛选 10/30 行 · 1/3 个文件 · 覆盖全仓库 33.3%');
+    expect(text('.loc-summary')).toBe('当前筛选 10/30 行，1/3 个文件，覆盖全仓库 33.3%');
     expect(all('.tm-node').map((el) => el.getAttribute('data-path'))).toEqual(['src', 'src/a.ts']);
     await click('.tm-legend .lg[data-cat="test"]');
     expect(all('.tm-node')).toHaveLength(3);
@@ -458,7 +470,7 @@ describe('App', () => {
     await mount();
     await click('.seg button:nth-of-type(2)');
     await click('.sw-item:nth-of-type(1) input');
-    expect(text('.loc-summary')).toBe('当前筛选 23/28 行 · 2/3 个文件 · 覆盖全仓库 82.1%');
+    expect(text('.loc-summary')).toBe('当前筛选 23/28 行，2/3 个文件，覆盖全仓库 82.1%');
     expect(text('.tm-legend .lg-val')).toBe('14 行 / 1 文件');
   });
 
@@ -478,7 +490,7 @@ describe('App', () => {
     // 默认贴着最新的一周：窗口是 2025-08-25 ~ 2026-01-25，头部只显示到还有数据的地方
     expect(all('.grid .cell')).toHaveLength(22 * 7);
     expect(all('.grid .cell')[0].getAttribute('data-date')).toBe('2025-08-25');
-    expect(text('.cal-range')).toBe('2025-08-25 ~ 2026-01-06');
+    expect(text('.cal-range')).toBe('2025年8月25日 ~ 2026年1月6日');
     // 拖动条铺满整行（一屏排得下 128 格），历史只有 32 周：32 格居中、两端留空
     const frame = container.querySelector('.scrub-frame') as HTMLElement;
     const track = container.querySelector('.scrub-track') as HTMLElement;
@@ -491,20 +503,20 @@ describe('App', () => {
     expect(track.getAttribute('aria-valuemax')).toBe('11');
     // 方向键一次挪一周，框不动、动的是格子
     await key('.scrub-track', 'ArrowLeft');
-    expect(text('.cal-range')).toBe('2025-08-18 ~ 2026-01-06');
+    expect(text('.cal-range')).toBe('2025年8月18日 ~ 2026年1月6日');
     expect(all('.grid .cell')[0].getAttribute('data-date')).toBe('2025-08-18');
     expect(frame.style.left).toBe(`${53 * 7 - 2}px`);
     // Home / End 到两头
     await key('.scrub-track', 'Home');
     expect(all('.grid .cell')[0].getAttribute('data-date')).toBe('2025-06-16');
-    expect(text('.cal-range')).toBe('2025-06-16 ~ 2025-11-16');
+    expect(text('.cal-range')).toBe('2025年6月16日 ~ 2025年11月16日');
     // 到最旧的一周：32 周仍在条上，只是整体往右挪了
     expect(all('.scrub-track .sc:not(.void)')).toHaveLength(32);
     await key('.scrub-track', 'End');
     expect(all('.grid .cell')[0].getAttribute('data-date')).toBe('2025-08-25');
     // 拖格子条：往右拖看到更早的周，框始终不动
     await drag('.scrub-track', 172, 200);
-    expect(text('.cal-range')).toBe('2025-07-28 ~ 2025-12-28');
+    expect(text('.cal-range')).toBe('2025年7月28日 ~ 2025年12月28日');
     expect(all('.grid .cell')[0].getAttribute('data-date')).toBe('2025-07-28');
     expect(frame.style.left).toBe(`${53 * 7 - 2}px`);
   });

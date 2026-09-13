@@ -88,7 +88,7 @@ describe('颜色换算', () => {
     // 增删色按观感偏亮，白底上退到 4:1；日历里它铺在格底上，也还在 3:1 之上
     for (const token of ['#2b8f4f', '#d4513f']) {
       expect(hexContrast(token, '#ffffff'), `${token} on white`).toBeGreaterThanOrEqual(4);
-      expect(hexContrast(token, '#edf0f3'), `${token} on cell bg`).toBeGreaterThanOrEqual(3);
+      expect(hexContrast(token, '#dde3e9'), `${token} on cell bg`).toBeGreaterThanOrEqual(3);
     }
     // 开关滑轨是非文字控件，按 3:1 要求
     for (const bg of ['#ffffff', '#f7f8fa']) {

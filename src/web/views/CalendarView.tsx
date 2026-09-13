@@ -20,7 +20,7 @@ import {
   weekIndex,
   weekStart,
 } from '../lib/calendar.js';
-import { formatNumber as f } from '../lib/format.js';
+import { formatLocalDate, formatNumber as f } from '../lib/format.js';
 import { useLabel } from '../lib/i18n.js';
 
 /** 日历格宽度与间距，跟着 styles.css 的 --cw 与 --gap 走。 */
@@ -63,7 +63,7 @@ interface CalendarViewProps {
 }
 
 export function CalendarView({ data, error, onRetry, mode, hidden }: CalendarViewProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const label = useLabel();
   const [hoverDate, setHoverDate] = useState<string | undefined>(undefined);
   const [pinned, setPinned] = useState<string | undefined>(undefined);
@@ -89,22 +89,27 @@ export function CalendarView({ data, error, onRetry, mode, hidden }: CalendarVie
   // 显示窗口的结束日：最后一次提交距今不超过 28 天就显示到今天，否则停在提交那天
   const end = range?.max ? displayEnd(range.max, today) : '';
   const weeks = useMemo(() => weekCount(min, end), [min, end]);
-  /** 一屏的周数：按容器宽度算；数据不够铺满时窗口就是数据本身 */
-  const visible = Math.max(1, Math.min(cols > 0 ? cols : weeks || 1, Math.max(1, weeks)));
+  /** 一屏铺几周：跟着容器宽度走，宽度还没量到时先按一周算 */
+  const visible = Math.max(1, cols > 0 ? cols : 1);
   const lastWeek = Math.max(0, weeks - visible);
   /** 提交全在一屏里就没得可挪，拖动条也不出现 */
   const showStrip = lastWeek > 0;
-  const first = Math.min(Math.max(startWeek ?? lastWeek, 0), lastWeek);
+  /** 窗口左端在第几周：数据不够一屏时为负，窗口往左铺满、最右一列仍停在数据末尾 */
+  const first = weeks < visible ? weeks - visible : Math.min(Math.max(startWeek ?? lastWeek, 0), lastWeek);
   const windowStart = min && end ? weekStart(min, first) : '';
   const layout = useMemo(
     () => (windowStart ? buildLayout(windowStart, shiftDays(windowStart, visible * 7 - 1), months) : EMPTY_LAYOUT),
     [windowStart, visible, months],
   );
-  // 顶部那行的时间范围：两端补出来的整周不算，所以收进数据范围里
+  // 顶部那行的时间范围：两端补出来的整周不算，所以收进数据范围里；显示给用户的日期按本地写法
   const weekMonday = layout.weeks[0]?.[0] ?? '';
   const weekSunday = layout.weeks[layout.weeks.length - 1]?.[6] ?? '';
   const shownFrom = range && weekMonday ? clampText(weekMonday, range.min, range.max) : '';
   const shownTo = range && weekSunday ? clampText(weekSunday, range.min, range.max) : '';
+  /** 卡片头部与拖动条读数共用的一句话。 */
+  const rangeText = shownFrom
+    ? t('calendar.windowRange', { start: formatLocalDate(shownFrom, i18n.language), end: formatLocalDate(shownTo, i18n.language) })
+    : '';
 
   const maxVal = Math.max(1, data?.maxVal ?? 1);
   const maxCommits = Math.max(1, data?.maxCommits ?? 1);
@@ -273,9 +278,7 @@ export function CalendarView({ data, error, onRetry, mode, hidden }: CalendarVie
       <div hidden={error !== undefined}>
         <div className="card">
           <div className="cal-head">
-            <span className="cal-range">
-              {shownFrom ? t('calendar.windowRange', { start: shownFrom, end: shownTo }) : ''}
-            </span>
+            <span className="cal-range">{rangeText}</span>
             <span className="cal-legend">
               <span className="legend-item">
                 <span className="sw" style={{ background: 'var(--green)' }} aria-hidden="true" />
@@ -312,7 +315,7 @@ export function CalendarView({ data, error, onRetry, mode, hidden }: CalendarVie
                       const stat = data?.days[date]?.groups[mode] ?? ZERO;
                       const churn = stat.add + stat.del;
                       const classes = ['cell'];
-                      // 第一次提交之前、最后一次提交之后的日子还没有数据，底色比普通格子更白
+                      // 第一次提交之前、最后一次提交之后的日子不算项目历史，画得更深、也不跟着悬浮放大
                       if (!range || date < range.min || date > range.max) {
                         classes.push('out');
                       }
@@ -342,7 +345,7 @@ export function CalendarView({ data, error, onRetry, mode, hidden }: CalendarVie
                           tabIndex={date === tabbable ? 0 : -1}
                           aria-current={date === today ? 'date' : undefined}
                           aria-label={t('calendar.cellLabel', {
-                            date,
+                            date: formatLocalDate(date, i18n.language),
                             commits:
                               stat.commits > 0
                                 ? t('calendar.commitsCount', { count: stat.commits })
@@ -380,7 +383,7 @@ export function CalendarView({ data, error, onRetry, mode, hidden }: CalendarVie
                 aria-valuemin={1}
                 aria-valuemax={lastWeek + 1}
                 aria-valuenow={first + 1}
-                aria-valuetext={t('calendar.windowRange', { start: shownFrom, end: shownTo })}
+                aria-valuetext={rangeText}
                 onPointerDown={onStripDown}
                 onPointerMove={onStripMove}
                 onPointerUp={onStripUp}
@@ -462,12 +465,12 @@ export function CalendarView({ data, error, onRetry, mode, hidden }: CalendarVie
               ? t('calendar.headNone')
               : mode !== 'all'
                 ? t('calendar.headDayGroup', {
-                    date: commitDate,
+                    date: formatLocalDate(commitDate, i18n.language),
                     prefix: groupLabel,
                     commits: t('calendar.commitsCount', { count: commitList.length }),
                   })
                 : t('calendar.headDay', {
-                    date: commitDate,
+                    date: formatLocalDate(commitDate, i18n.language),
                     commits: commitDay
                       ? t('calendar.commitsCount', { count: commitList.length })
                       : t('calendar.commitsNone'),

@@ -2,8 +2,8 @@
   --cw: 36px; --ch: 26px; --gap: 4px;
   /* 正文与辅助文字都按 4.5:1 挑过（白底 / 页面底 / 卡片底） */
   --ink: #1a1f27; --sub: #5b6470; --muted: #676f7b;
-  --line: #e8ecf0; --cell-bg: #edf0f3;
-  /* 增删色偏亮，接近最初那版的观感；白底约 4.1:1，日历格底约 3.6:1 */
+  --line: #e8ecf0; --cell-bg: #dde3e9; --cell-out-bg: #edf0f3;
+  /* 增删色偏亮，接近最初那版的观感；白底约 4.1:1，日历格底约 3.2:1 */
   --green: #2b8f4f; --red: #d4513f;
   --accent: #2f63c8;
   /* 开关滑轨是非文字控件，按 3:1 挑 */
@@ -58,7 +58,9 @@ main { max-width: 980px; margin: 0 auto; padding: 24px 28px 90px; }
 .calendar-wrap { display: flex; align-items: flex-start; gap: 10px; }
 .dow-labels { display: flex; flex-direction: column; gap: var(--gap); font-size: 10px; color: var(--muted); padding-top: 24px; }
 .dow-labels span { height: var(--ch); line-height: var(--ch); }
-.grid-area { flex: 1; overflow: hidden; padding-bottom: 4px; }
+/* min-width 归零是为了让它能跟着容器收窄（flex 项默认按内容宽度兜底）；
+   网格宽度由容器量出来，不会溢出，所以这里不需要裁剪，悬停放大的格子与投影才能完整画出来 */
+.grid-area { flex: 1; min-width: 0; padding-bottom: 4px; }
 /* 网格靠右：一屏能放几周就铺几周，不够铺满时月份行与网格各自贴右 */
 .grid-area > .month-row, .grid-area > .grid { width: fit-content; margin-left: auto; }
 .month-row { display: grid; gap: var(--gap); font-size: 11px; color: var(--sub); height: 20px; margin-bottom: 4px; }
@@ -68,11 +70,11 @@ main { max-width: 980px; margin: 0 auto; padding: 24px 28px 90px; }
 
 .cell { width: var(--cw); height: var(--ch); border: 0; padding: 0; font: inherit; border-radius: 5px; background: var(--cell-bg); display: flex; flex-direction: column; align-items: flex-start; overflow: hidden; cursor: pointer; transition: transform .08s ease, box-shadow .08s ease, opacity .18s ease; }
 .cell.pad { background: transparent; cursor: default; }
-/* 第一次提交之前与最后一次提交之后的日子没有数据，比普通格子更白一点 */
-.cell.out { background: #f8fafb; }
+/* 第一次提交之前、最后一次提交之后的日子不算项目历史：底色比普通格子更深、点不动也不放大 */
+.cell.out { background: var(--cell-out-bg); cursor: default; }
 .cell.today { box-shadow: inset 0 0 0 1.5px rgba(26,31,39,.4); }
 .cell.selected { box-shadow: inset 0 0 0 1.5px var(--accent); }
-.cell:not(.pad):hover { transform: scale(1.3); box-shadow: 0 3px 10px rgba(16,24,40,.2); z-index: 5; }
+.cell:not(.pad):not(.out):hover { transform: scale(1.3); box-shadow: 0 3px 10px rgba(16,24,40,.2); z-index: 5; }
 .cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; z-index: 6; }
 @media (prefers-reduced-motion: reduce) {
   .cell { transition: none; }

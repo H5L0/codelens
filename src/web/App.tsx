@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CalendarData, LocData } from '../core/types.js';
 import { Seg } from './components/Seg.js';
+import { formatLocalDate } from './lib/format.js';
 import { useLabel } from './lib/i18n.js';
 import { useJson } from './lib/use-json.js';
 import { CalendarView } from './views/CalendarView.js';
@@ -31,8 +32,8 @@ export function App() {
   ];
   const range = calendar.data
     ? t('app.range', {
-        min: calendar.data.range.min,
-        max: calendar.data.range.max,
+        min: formatLocalDate(calendar.data.range.min, i18n.language),
+        max: formatLocalDate(calendar.data.range.max, i18n.language),
         count: calendar.data.totals.days,
       })
     : '';
