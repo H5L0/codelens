@@ -454,7 +454,7 @@ describe('App', () => {
     expect(all('.tm-stage').every((el) => !el.classList.contains('entering'))).toBe(true);
   });
 
-  test('[App] 剔除空行开关应该切换统计口径', async () => {
+  test('[App] 剔除空行开关应该切换统计规则', async () => {
     await mount();
     await click('.seg button:nth-of-type(2)');
     await click('.sw-item:nth-of-type(1) input');

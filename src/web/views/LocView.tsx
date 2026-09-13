@@ -425,7 +425,7 @@ export function LocView({ data, error, onRetry, hidden }: LocViewProps) {
     setHover(undefined);
   };
 
-  // 图例顺序固定按未筛选前的总行数排：切换分类开关或统计口径都不会挪动位置
+  // 图例顺序固定按未筛选前的总行数排：切换分类开关或统计规则都不会挪动位置
   const legendCategories = useMemo(() => {
     const lines = (id: string): number => catStats.get(id)?.lines ?? 0;
     return [...categories].sort((a, b) => lines(b.id) - lines(a.id));

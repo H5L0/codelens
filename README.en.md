@@ -1,6 +1,6 @@
 # codelens
 
-A local dashboard for any git repository: commit history and lines of code.
+A local dashboard for a git repository: the change history and the lines of code.
 
 English | [简体中文](./README.md)
 
@@ -19,19 +19,19 @@ npm install -g @h5l0/codelens
 codelens
 ```
 
-No configuration is required. Data is generated on the fly at startup, served to your local browser only, and never written into the analyzed repository.
+No configuration is necessary. The tool collects the data at startup and serves it to the local browser only. It does not write to the analyzed repository.
 
 ## The two views
 
 ### Change calendar
 
-A week-based heatmap: the top bar of each cell is inserted lines, the bottom bar is deleted lines, and bar width uses a square-root scale. Hover a day to see that day's summary and commits, and click it to pin the day (click again to unpin); you can also Tab into the calendar and move between days with the arrow keys. The header switch filters by group, and both the stats cards and the commit list then follow that group. The calendar shows as many weeks as the window fits and never scrolls sideways, sitting flush right with today at the far right; when a repository has been quiet for more than 28 days the right edge stops at the last commit instead. Days before the first commit and after the last one stay in the grid with a paler background. The top row shows the visible date range on the left and the inserted/deleted line legend on the right; the strip along the bottom (it appears only once the history is longer than one screen) has one cell per week, coloured grey to green by that week's inserted lines — the frame sits in the middle and you drag the strip itself to pan (drag right for older weeks), with a fixed opacity gradient at both ends. Stat cards read "Total" on the range and show both the daily average and the peak in their note.
+A weekly heat map of the changes: each cell is one day and shows the lines added and removed. You can filter by group, or move the time window to see other weeks.
 
 ![Change calendar](docs/screenshots/en/calendar.png)
 
 ### Lines of code
 
-A treemap where rectangle area is proportional to line count, color is the category, and shade is the directory depth. Click a rectangle to zoom into that directory and use the breadcrumb or Esc to go back; directories you can zoom into in the current view are reachable with Tab and Enter. The switches control the counting mode and expansion depth, and the legend toggles categories.
+A treemap: the area of a rectangle is the line count, the color is the category, and the shade is the directory depth. Click a rectangle to open that directory, or use the switches to set the counting mode and the depth.
 
 ![Lines of code](docs/screenshots/en/loc.png)
 
@@ -56,17 +56,17 @@ codelens [directory] [options]
 
 ## Profiles
 
-`--profile` decides how the repository is split. Two ways to use it:
+`--profile` sets how the tool splits the repository:
 
 1. Point it at a JSON file: `--profile ./my-profile.json`;
-2. Or use a name under `profiles` in `codelens.config.json` (relocate it with `--config`): `--profile web`.
+2. Or use a name under `profiles` in `codelens.config.json`. Use `--config` to move that file: `--profile web`.
 
 Two profiles are built in:
 
 | Name | What it does |
 | --- | --- |
-| `all` | Default; no grouping, the whole repository is counted together |
-| `web` | Common frontend/backend layout: `frontend/`, `web/`, `client/`, `ui/` and friends count as frontend, everything else as backend |
+| `all` | Default; no groups, the tool counts the whole repository together |
+| `web` | `frontend/`, `web/`, `client/`, `ui/` and similar directories count as frontend, everything else as backend |
 
 ### Config file format
 
@@ -97,40 +97,40 @@ Two profiles are built in:
 
 Field notes:
 
-- `groups[].match`, `categories[].match` and `ignore` use globs relative to the repository root: `**` crosses directories, `*` does not, `?` matches one character, `{a,b}` matches either; a pattern without `/` matches items of that name at any depth, `/foo` is anchored to the root, and `foo/` means the directory and everything inside it.
-- The config file may contain `//` and `/* */` comments and trailing commas.
-- `groups[].id` must not be the reserved `all` and must be unique within a profile.
-- `hue` and `sat` are HSL color components for group and category colors; they default to 214 and 50.
-- `categories[].defaultOn: false` means the category starts switched off in the legend (of the built-in categories, "generated code", "docs" and "config" start off).
+- `groups[].match`, `categories[].match` and `ignore` use globs relative to the repository root: `**` crosses directories, `*` does not, `?` matches one character, and `{a,b}` matches either. A pattern without `/` matches items of that name at any depth. `/foo` is anchored to the root. `foo/` means the directory and everything inside it.
+- The config file accepts `//` and `/* */` comments and trailing commas.
+- `groups[].id` must not be `all`, and it must be unique in one profile.
+- `hue` and `sat` are HSL color components for the group and category colors. The defaults are 214 and 50.
+- `categories[].defaultOn: false` means the category starts off in the legend. Of the built-in categories, "generated code", "docs" and "config" start off.
 
-Without `categories`, six built-in ones are used: application code, tests, scripts, docs, config, generated code.
+Without `categories`, the tool uses six built-in categories: application code, tests, scripts, docs, config and generated code.
 
-A profile name the config file does not define falls back to the built-in profile: a repository shipping a `codelens.config.json` with only custom profiles still supports `codelens --profile all` and `--profile web`. Only a name missing from both places is an error.
+A profile name that the config file does not define falls back to the built-in profile. A repository with a `codelens.config.json` that defines only custom profiles still supports `codelens --profile all` and `--profile web`. A name that is missing from both places is an error.
 
 ## Counting rules
 
-- `.gitignore` is honored by default; when the directory is not a git repository, equivalent ignore rules are applied instead. `--no-gitignore` turns this off.
-- Dependency and build directories such as `node_modules`, `dist`, `build`, `coverage`, `.venv`, `__pycache__` and `target` are always skipped.
-- `--exclude` and the config's `ignore` apply to both views: excluded directories are neither counted nor attributed in the change calendar.
-- Binary files, files larger than 3MB and empty files are excluded; a file that cannot be read is skipped and reported as a count in the startup log. Line counts are physical lines (a trailing newline does not count as an extra line).
-- Calendar entries are grouped by the day of the commit time (committer date), matching how `--days` filters. "Changed lines = insertions + deletions".
-- Merge commits, empty commits and commits that only change file modes or binaries have no line counts, but they still appear in the commit list and count as commits.
-- When you run it on a subdirectory of a repository, both views count that subdirectory only and resolve paths relative to it.
+- The tool honors `.gitignore` by default. If the directory is not a git repository, the tool applies equivalent ignore rules instead. `--no-gitignore` turns this off.
+- The tool always skips dependency and build directories, such as `node_modules`, `dist`, `build`, `coverage`, `.venv`, `__pycache__` and `target`.
+- `--exclude` and the config's `ignore` apply to both views. The tool does not count excluded directories, and the calendar does not show them.
+- The tool skips binary files, files larger than 3MB and empty files. If the tool cannot read a file, it skips that file and reports the count in the startup log. Line counts are physical lines; the newline at the end of a file does not count as one more line.
+- The calendar puts each commit in the day of its commit time (committer date). This matches the `--days` filter. "Changed lines" means insertions plus deletions.
+- Merge commits, empty commits and commits that only change file modes or binaries have no line counts. They still appear in the commit list and count as commits.
+- If you run the tool on a subdirectory of a repository, both views count that subdirectory only and resolve paths relative to it.
 
 ## Known limits
 
-- The change calendar needs git: a repository without commits, or without git at all, leaves the calendar empty while the lines view still works.
-- Line counts say nothing about code complexity.
-- The treemap draws at most 6000 rectangles; the rest are not shown.
-- The calendar is padded to whole weeks, so a window that does not start or end on a week boundary shows a few extra days without data (with a paler background).
+- The change calendar needs git. A repository without commits, or without git, leaves the calendar empty. The lines view still works.
+- Line counts do not show the code complexity.
+- The treemap draws at most 6000 rectangles. The rest are not shown.
+- The calendar is padded to whole weeks. A window that does not start or end on a week boundary shows a few extra days without data, with a paler background.
 
 ## Languages
 
-The page follows your browser language. Simplified Chinese, English, Japanese and Korean are built in; other languages fall back to English. Append `?lang={langCode}` to the URL to override it for this session, for example `?lang=zh` or `?lang=ko`.
+The page follows the browser language. Simplified Chinese, English, Japanese and Korean are built in. Other languages fall back to English. Append `?lang={langCode}` to the URL to override the language, for example `?lang=zh` or `?lang=ko`.
 
 ## Development
 
-See [DEV.md](./DEV.md) for the development setup, project layout and release process.
+See [DEV.md](./DEV.md) for the development setup, the project layout and the release process.
 
 ## License
 

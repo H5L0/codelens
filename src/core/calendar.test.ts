@@ -153,10 +153,10 @@ describe('buildCalendar', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 口径一致性：合并提交、二进制改动、忽略规则、子目录
+// 统计规则一致性：合并提交、二进制改动、忽略规则、子目录
 // ---------------------------------------------------------------------------
 
-describe('buildCalendar 的统计口径', () => {
+describe('buildCalendar 的统计规则', () => {
   const repo = mkdtempSync(join(tmpdir(), 'codelens-scope-'));
   const SCOPE_PROFILE: Profile = {
     name: 'scope',
