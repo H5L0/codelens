@@ -102,11 +102,13 @@ npm run dev -- ../some-repo --profile web
 
 ## 发布
 
-发布到公共 npm，包名为 `@h5l0/codelens`（个人作用域；不带作用域的 `codelens` 会被 npm 以「与 code-lens 过于相似」拒绝；作用域包默认私有，所以 `publishConfig.access` 固定为 `public`）。`prepublishOnly` 会依次跑 `typecheck`、`test` 与 `build`，任一失败都发不出去；CI（`.github/workflows/ci.yml`）在 node 20 与 22、ubuntu 与 windows 上跑同一套命令。
+包名 `@h5l0/codelens`（个人作用域；不带作用域的 `codelens` 会被 npm 以「与 code-lens 过于相似」拒绝；作用域包默认私有，所以 `publishConfig.access` 固定为 `public`）。
+
+发布由版本 tag 驱动：推 `vX.Y.Z` 标签时，`.github/workflows/publish.yml` 跑 `typecheck`、`test`、`build`，再校验标签与 `package.json` 的版本一致（不一致直接失败），该版本已在 npm 上则跳过，否则发布。
 
 ```bash
-npm version patch        # 或 minor / major
-npm publish
+npm version patch        # 或 minor / major，会改版本并自动提交、打 vX.Y.Z 标签
+git push --follow-tags origin main
 ```
 
 注意：
