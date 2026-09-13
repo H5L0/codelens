@@ -116,7 +116,7 @@ describe('buildLoc', () => {
     expect(mode).toBe('walk');
   });
 
-  test('[buildLoc] 应该带出分类定义与配置档名', () => {
+  test('[buildLoc] 应该带出分类定义与预设名', () => {
     expect(data.categories.map((cat) => cat.id)).toContain('app');
     // 内置分类的 labelKey 要随数据下发，页面按当前语言翻译
     expect(data.categories.find((cat) => cat.id === 'app')?.labelKey).toBe('category.app');

@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
-// 配置档
-// --profile 选择一份配置：内置的 all（不区分）与 web（常见前后端目录），
-// 或在 codelens.config.json（也可用 --profile 直接指向 json 文件）里自定义，
+// 预设
+// --profile 选择一份预设：内置的 all（不区分）与 web（常见前后端目录），
+// 或在配置 codelens.config.json（也可用 --profile 直接指向 json 文件）里自定义。
+// 配置的 profiles 是数组，每项带 id，它就是 --profile 后面写的名字。
 // 用 groups 划分前后端等分组，用 categories 划分模块与文件类别。
 // 内置项的 label 是英文，labelKey 供页面按语言覆盖；用户配置的 label 原样使用。
 // ---------------------------------------------------------------------------
@@ -82,10 +83,10 @@ export const DEFAULT_CATEGORIES: CategoryDef[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// 内置配置档
+// 内置预设
 // ---------------------------------------------------------------------------
 
-/** 未配置的兜底档：不做任何分组，整个仓库一起统计。 */
+/** 未配置的兜底预设：不做任何分组，整个仓库一起统计。 */
 const PROFILE_ALL: ProfileEntry = { label: 'All', labelKey: 'profile.all' };
 
 /** 常见前后端目录布局：前端目录归前端，其余归后端。 */
@@ -139,6 +140,11 @@ interface ProfileEntry {
   groups?: GroupEntry[];
   categories?: CategoryDef[];
   ignore?: string[];
+}
+
+interface NamedProfileEntry {
+  id: string;
+  entry: ProfileEntry;
 }
 
 function fail(where: string, message: string): never {
@@ -248,6 +254,26 @@ function parseEntry(value: unknown, where: string): ProfileEntry {
   return entry;
 }
 
+function parseProfiles(value: unknown, where: string): NamedProfileEntry[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    fail(where, 'must be an array');
+  }
+  const seen = new Set<string>();
+  return value.map((item, i) => {
+    const at = `${where}[${i}]`;
+    const obj = asObject(item, at);
+    const id = asString(obj.id, `${at}.id`);
+    if (seen.has(id)) {
+      fail(where, `contain a duplicate id: ${id}`);
+    }
+    seen.add(id);
+    return { id, entry: parseEntry(obj, at) };
+  });
+}
+
 function readJson(path: string): unknown {
   let text: string;
   try {
@@ -319,23 +345,37 @@ function stripJsonc(text: string): string {
 }
 
 interface ResolvedProfile extends Profile {
-  /** 配置文件路径，未使用配置文件时为 undefined。 */
+  /** 配置路径，未使用配置时为 undefined。 */
   configPath: string | undefined;
 }
 
 interface LoadProfileOptions {
   root: string;
   name: string;
-  /** 显式指定的配置文件路径。 */
+  /** 显式指定的配置路径。 */
   configPath?: string;
   /** 在配置之外追加的忽略 glob。 */
   exclude: string[];
 }
 
+/** 同一份列表里的 id 必须唯一，也不能占用保留名。 */
+function checkIds(defs: { id: string }[], where: string): void {
+  const seen = new Set<string>();
+  for (const def of defs) {
+    if (seen.has(def.id)) {
+      fail(where, `contain a duplicate id: ${def.id}`);
+    }
+    if (RESERVED_IDS.has(def.id)) {
+      fail(where, `must not use the reserved id: ${def.id}`);
+    }
+    seen.add(def.id);
+  }
+}
+
 /**
- * 按名字解析配置档：
- * 1. 名字指向 json 文件时直接当档用；
- * 2. 否则先找配置文件里的 profiles[名字]，再找内置档。
+ * 按名字解析预设：
+ * 1. 名字指向 json 文件时直接当预设用；
+ * 2. 否则先找配置的 profiles 里 id 同名的一项，再找内置预设。
  */
 export function loadProfile(opts: LoadProfileOptions): ResolvedProfile {
   const { root, name } = opts;
@@ -352,12 +392,13 @@ export function loadProfile(opts: LoadProfileOptions): ResolvedProfile {
     usedConfig = file;
   } else if (opts.configPath || exists(configPath)) {
     const file = asObject(readJson(configPath), configPath);
-    const profiles = file.profiles === undefined ? {} : asObject(file.profiles, `profiles of ${configPath}`);
-    if (hasOwn(profiles, name)) {
-      entry = parseEntry(profiles[name], `profiles.${name} of ${configPath}`);
+    const profiles = parseProfiles(file.profiles, `profiles of ${configPath}`);
+    const found = profiles.find((item) => item.id === name);
+    if (found) {
+      entry = found.entry;
       usedConfig = configPath;
     } else if (hasOwn(BUILTIN_PROFILES, name)) {
-      // 配置里没有这一档就回退内置档：仓库里放了一份自定义配置，
+      // 配置里没有这个预设就回退内置预设：仓库里放了一份自定义配置，
       // 不该让默认的 `codelens` / `--profile web` 直接跑不起来
       entry = BUILTIN_PROFILES[name];
     } else {
@@ -366,38 +407,27 @@ export function loadProfile(opts: LoadProfileOptions): ResolvedProfile {
   } else if (hasOwn(BUILTIN_PROFILES, name)) {
     entry = BUILTIN_PROFILES[name];
   } else {
-    throw new Error(`no profile named ${name}; available: ${names(undefined, BUILTIN_PROFILES)}`);
+    throw new Error(`no profile named ${name}; available: ${names([], BUILTIN_PROFILES)}`);
   }
 
   const groups = entry.groups ?? [];
-  const ids = new Set<string>();
-  for (const group of groups) {
-    if (ids.has(group.id)) {
-      fail(`groups of ${usedConfig ?? name}`, `contain a duplicate id: ${group.id}`);
-    }
-    if (RESERVED_IDS.has(group.id)) {
-      fail(`groups of ${usedConfig ?? name}`, `must not use the reserved id: ${group.id}`);
-    }
-    ids.add(group.id);
-  }
-  for (const category of entry.categories ?? []) {
-    if (RESERVED_IDS.has(category.id)) {
-      fail(`categories of ${usedConfig ?? name}`, `must not use the reserved id: ${category.id}`);
-    }
-  }
+  const categories = entry.categories ?? DEFAULT_CATEGORIES;
+  // 分组与分类各用一套 id：一个给日历配色，一个给树形图配色，两边重名不算冲突
+  checkIds(groups, `groups of ${usedConfig ?? name}`);
+  checkIds(categories, `categories of ${usedConfig ?? name}`);
 
   return {
     name,
     label: entry.label ?? (groups.length > 0 ? groups.map((group) => group.label).join(' / ') : 'All'),
     groups,
-    categories: entry.categories ?? DEFAULT_CATEGORIES,
+    categories,
     ignore: [...(entry.ignore ?? []), ...opts.exclude],
     configPath: usedConfig,
   };
 }
 
-function names(profiles: Record<string, unknown> | undefined, builtin: Record<string, ProfileEntry>): string {
-  return [...Object.keys(profiles ?? {}), ...Object.keys(builtin)].join(', ');
+function names(profiles: NamedProfileEntry[], builtin: Record<string, ProfileEntry>): string {
+  return [...profiles.map((item) => item.id), ...Object.keys(builtin)].join(', ');
 }
 
 function isProfileFile(name: string): boolean {
@@ -412,7 +442,7 @@ function exists(path: string): boolean {
   }
 }
 
-/** 供帮助信息使用：列出内置配置档。 */
+/** 供帮助信息使用：列出内置预设。 */
 export function builtinProfileNames(): string[] {
   return Object.keys(BUILTIN_PROFILES);
 }

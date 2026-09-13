@@ -69,7 +69,7 @@ describe('parseArgs', () => {
 });
 
 describe('helpText', () => {
-  test('[helpText] 列出内置档与所有选项', () => {
+  test('[helpText] 列出内置预设与所有选项', () => {
     const text = helpText();
     for (const flag of ['--profile', '--config', '--days', '--exclude', '--port', '--host', '--no-open', '--no-gitignore', '--dump', '--dev']) {
       expect(text).toContain(flag);

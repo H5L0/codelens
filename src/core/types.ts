@@ -45,7 +45,7 @@ export interface CategoryDef {
   defaultOn?: boolean;
 }
 
-/** 配置档：一次分析使用的分组、分类与忽略规则。 */
+/** 预设：一次分析使用的分组、分类与忽略规则。 */
 export interface Profile {
   name: string;
   label: string;
