@@ -7,7 +7,7 @@ describe('parseArgs', () => {
     expect(args).toMatchObject({
       dir: '',
       profile: 'all',
-      days: 120,
+      days: 0,
       port: 5178,
       host: '127.0.0.1',
       open: true,

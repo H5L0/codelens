@@ -46,7 +46,7 @@ codelens [directory] [options]
 
 --profile <name|file>  Profile, see below. Built in: all, web
 --config <file>        Config file, defaults to <directory>/codelens.config.json
---days <days>          Calendar time span, 0 means full history (default 120)
+--days <days>          Calendar time span, 0 means the full history (default 0)
 --exclude <glob>       Extra paths to ignore, repeatable
 --port <port>          Listen port, default 5178, tries the next ports when busy
 --host <address>       Listen address, default 127.0.0.1. Other addresses expose the page to your network

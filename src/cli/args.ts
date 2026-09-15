@@ -51,7 +51,7 @@ export function parseArgs(argv: readonly string[]): Args {
     dir: '',
     profile: 'all',
     config: undefined,
-    days: 120,
+    days: 0,
     exclude: [],
     port: Number(process.env.PORT ?? 5178),
     host: '127.0.0.1',
@@ -135,7 +135,7 @@ Usage
 Options
 ${row('--profile <name|file>', `Profile: built in ${builtinProfileNames().join(', ')}, or a custom json file`)}
 ${row('--config <file>', 'Config file, defaults to <directory>/codelens.config.json')}
-${row('--days <days>', 'Calendar span, 0 for full history (default 120)')}
+${row('--days <days>', 'Calendar time span, 0 means the full history (default 0)')}
 ${row('--exclude <glob>', 'Extra ignored paths, repeatable')}
 ${row('--port <port>', 'Listen port, default 5178, tries the next ports when busy')}
 ${row('--host <address>', 'Listen address, default 127.0.0.1')}
