@@ -20,6 +20,8 @@ export const zh = {
   calendar: {
     add: '新增行',
     del: '删除行',
+    legendOn: '点击隐藏该指标',
+    legendOff: '点击显示该指标',
     windowRange: '{{start}} ~ {{end}}',
     scrubLabel: '显示范围，拖动或按方向键平移',
     statCommits: '{{prefix}}提交',

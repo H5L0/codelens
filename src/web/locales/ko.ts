@@ -21,6 +21,8 @@ export const ko: Messages = {
   calendar: {
     add: '추가된 줄',
     del: '삭제된 줄',
+    legendOn: '클릭하면 이 지표를 숨깁니다',
+    legendOff: '클릭하면 이 지표를 표시합니다',
     windowRange: '{{start}} ~ {{end}}',
     scrubLabel: '표시 범위, 끌거나 방향키로 이동합니다',
     statCommits: '{{prefix}}커밋',

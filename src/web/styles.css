@@ -53,7 +53,7 @@ main { max-width: 980px; margin: 0 auto; padding: 24px 28px 90px; }
 /* 顶部一行：左边是当前显示的时间范围，右边是两条色带的图例 */
 .cal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; font-size: 12px; color: var(--sub); flex-wrap: wrap; }
 .cal-head .cal-range { color: var(--ink); font-weight: 650; font-variant-numeric: tabular-nums; }
-.cal-head .cal-legend { display: flex; align-items: center; gap: 18px; }
+.cal-head .cal-legend { display: flex; align-items: center; gap: 10px; }
 
 .calendar-wrap { display: flex; align-items: flex-start; gap: 10px; }
 .dow-labels { display: flex; flex-direction: column; gap: var(--gap); font-size: 10px; color: var(--muted); padding-top: 24px; }
@@ -73,7 +73,10 @@ main { max-width: 980px; margin: 0 auto; padding: 24px 28px 90px; }
 /* 第一次提交之前、最后一次提交之后的日子不算项目历史：底色比普通格子更深、点不动也不放大 */
 .cell.out { background: var(--cell-out-bg); cursor: default; }
 .cell.today { box-shadow: inset 0 0 0 1.5px rgba(26,31,39,.4); }
-.cell.selected { box-shadow: inset 0 0 0 1.5px var(--accent); }
+/* 选中的格子：跟悬停一样放大，并且一直保持，外面再套一圈强调色线条；
+   线条用 outline 而不是投影，就不跟悬停、今天的投影抢同一个属性 */
+.cell.selected:not(.pad):not(.out) { transform: scale(1.3); }
+.cell.selected { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 5; }
 .cell:not(.pad):not(.out):hover { transform: scale(1.3); box-shadow: 0 3px 10px rgba(16,24,40,.2); z-index: 5; }
 .cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; z-index: 6; }
 @media (prefers-reduced-motion: reduce) {
@@ -83,16 +86,23 @@ main { max-width: 980px; margin: 0 auto; padding: 24px 28px 90px; }
 .hbar { display: block; height: 50%; }
 .hbar.add { background: var(--green); }
 .hbar.del { background: var(--red); }
+/* 只留一条色带时改成整格铺色，像 GitHub 的贡献墙：越接近该指标的峰值越实 */
+.hfill { display: block; width: 100%; height: 100%; }
+.hfill.add { background: var(--green); }
+.hfill.del { background: var(--red); }
 /* 只看某个分组时，当天该分组没有改动，整格淡出 */
 .cell.dim:not(.pad) { opacity: .35; }
 
-.legend-item { display: flex; align-items: center; gap: 7px; }
-.sw { display: inline-block; width: 12px; height: 12px; }
+/* 图例两项可以点：点一下收起对应的色带，两条都收起时格子不画色带 */
+.legend-item { display: flex; align-items: center; gap: 7px; border: 0; background: transparent; font: inherit; color: var(--sub); cursor: pointer; padding: 2px 6px; border-radius: 6px; transition: background .15s, color .15s; }
+.legend-item:hover { background: #f4f6f8; }
+.legend-item.off { color: var(--muted); }
+.sw { display: inline-block; width: 12px; height: 12px; flex-shrink: 0; }
 
 /* 拖动条：一格一周，细高，颜色从灰到绿表示那一周的新增行数；
    包裹框固定在条中间，直接拖格子条平移窗口，两端是固定的一段透明度渐变 */
 .scrub { margin-top: 16px; padding-top: 12px; border-top: 1px solid #f0f2f5; }
-.scrub-track { position: relative; display: flex; width: fit-content; margin-left: auto; cursor: grab; border-radius: 3px; }
+.scrub-track { position: relative; display: flex; width: fit-content; margin-left: auto; cursor: grab; border-radius: 3px; touch-action: none; user-select: none; -webkit-user-select: none; }
 .scrub.dragging .scrub-track { cursor: grabbing; }
 .scrub-track:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .scrub-cells { display: flex; gap: 2px; height: 20px; -webkit-mask-image: linear-gradient(90deg, transparent, #000 min(64px, 50%), #000 calc(100% - min(64px, 50%)), transparent); mask-image: linear-gradient(90deg, transparent, #000 min(64px, 50%), #000 calc(100% - min(64px, 50%)), transparent); }

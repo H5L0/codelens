@@ -19,6 +19,8 @@ export const en: Messages = {
   calendar: {
     add: 'Inserted lines',
     del: 'Deleted lines',
+    legendOn: 'Click to hide this metric',
+    legendOff: 'Click to show this metric',
     windowRange: '{{start}} ~ {{end}}',
     scrubLabel: 'Visible range; drag or use the arrow keys to pan',
     statCommits: '{{prefix}} commits',

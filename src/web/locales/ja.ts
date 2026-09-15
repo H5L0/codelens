@@ -21,6 +21,8 @@ export const ja: Messages = {
   calendar: {
     add: '追加行',
     del: '削除行',
+    legendOn: 'クリックでこの指標を非表示',
+    legendOff: 'クリックでこの指標を表示',
     windowRange: '{{start}} ~ {{end}}',
     scrubLabel: '表示範囲。ドラッグまたは矢印キーで移動します',
     statCommits: '{{prefix}}コミット',

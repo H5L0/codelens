@@ -68,6 +68,8 @@ export function CalendarView({ data, error, onRetry, mode, hidden }: CalendarVie
   const [hoverDate, setHoverDate] = useState<string | undefined>(undefined);
   const [pinned, setPinned] = useState<string | undefined>(undefined);
   const [focusDate, setFocusDate] = useState('');
+  /** 新增与删除两条色带是否显示：点图例切换，只留一条时格子改成整格铺色 */
+  const [shown, setShown] = useState({ add: true, del: true });
   /** 一屏放得下的周数与拖动条格数，量出来之前先按数据自己的宽度画 */
   const [cols, setCols] = useState(0);
   const [slots, setSlots] = useState(0);
@@ -115,6 +117,22 @@ export function CalendarView({ data, error, onRetry, mode, hidden }: CalendarVie
   const maxCommits = Math.max(1, data?.maxCommits ?? 1);
   const barW = (value: number): number =>
     value <= 0 ? 0 : Math.max(3, Math.round(Math.sqrt(value / maxVal) * CELL_W));
+  // 单指标铺色按它自己的峰值定浓淡，两个指标的量级差很多时另一边才不会淡得看不见
+  const peaks = useMemo(() => {
+    let add = 1;
+    let del = 1;
+    for (const day of Object.values(data?.days ?? {})) {
+      const stat = day.groups[mode] ?? ZERO;
+      add = Math.max(add, stat.add);
+      del = Math.max(del, stat.del);
+    }
+    return { add, del };
+  }, [data, mode]);
+  /** 只留一条色带时铺哪一条：两条都在或都收起时为 undefined。 */
+  const single: 'add' | 'del' | undefined = shown.add === shown.del ? undefined : shown.add ? 'add' : 'del';
+  /** 整格铺色的浓淡：当天没有改动就不铺，峰值铺满，最少的那点量也留个浅色。 */
+  const fillOpacity = (value: number, peak: number): number =>
+    value <= 0 ? 0 : Math.max(0.18, Math.min(1, Math.sqrt(value / peak)));
 
   // 一周一格的新增行合计（按当前分组），拖动条用它上色
   const weekLines = useMemo(() => {
@@ -142,6 +160,11 @@ export function CalendarView({ data, error, onRetry, mode, hidden }: CalendarVie
   const days = data?.totals.days ?? 0;
   const cards: Array<{ id: string; label: string }> =
     data && data.groups.length > 0 ? data.groups.map((group) => ({ id: group.id, label: label(group) })) : [{ id: 'all', label: '' }];
+  /** 图例两项：颜色、文案与显隐开关一一对应。 */
+  const metrics: Array<{ id: 'add' | 'del'; color: string; label: string }> = [
+    { id: 'add', color: 'var(--green)', label: t('calendar.add') },
+    { id: 'del', color: 'var(--red)', label: t('calendar.del') },
+  ];
   // 悬停或键盘焦点优先，其次是钉住的日期
   const cursorDate = hoverDate ?? pinned;
   const hoverDay = data && cursorDate ? data.days[cursorDate] : undefined;
@@ -170,6 +193,26 @@ export function CalendarView({ data, error, onRetry, mode, hidden }: CalendarVie
   useEffect(() => {
     setStartWeek(undefined);
   }, [range?.min, range?.max]);
+
+  // 拖动中兜底收尾：pointerup / pointercancel 落在条外（拖出窗口、切到别的窗口）时
+  // 条收不到，不兜住的话下一次指针扫过条就会继续平移窗口
+  useEffect(() => {
+    if (!dragging) {
+      return;
+    }
+    const stop = (): void => {
+      drag.current = undefined;
+      setDragging(false);
+    };
+    window.addEventListener('blur', stop);
+    document.addEventListener('pointerup', stop);
+    document.addEventListener('pointercancel', stop);
+    return () => {
+      window.removeEventListener('blur', stop);
+      document.removeEventListener('pointerup', stop);
+      document.removeEventListener('pointercancel', stop);
+    };
+  }, [dragging]);
 
   // 容器宽度决定一屏铺几周、条上排几格；隐藏时量出来是 0，保持上一次的结果
   useLayoutEffect(() => {
@@ -227,6 +270,10 @@ export function CalendarView({ data, error, onRetry, mode, hidden }: CalendarVie
   };
 
   const onStripDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    // 只接管左键，其余按键留给浏览器（右键菜单、中键自动滚动）
+    if (event.button !== 0) {
+      return;
+    }
     drag.current = { x: event.clientX, base: first };
     setDragging(true);
     capture(event.currentTarget, event.pointerId, true);
@@ -235,6 +282,13 @@ export function CalendarView({ data, error, onRetry, mode, hidden }: CalendarVie
   const onStripMove = (event: ReactPointerEvent<HTMLDivElement>): void => {
     const state = drag.current;
     if (!state) {
+      return;
+    }
+    // 按键已经松开说明 pointerup 丢了（拖出窗口、被系统打断），先收尾：
+    // 否则指针扫过条也会带着窗口跑
+    if (event.buttons === 0) {
+      drag.current = undefined;
+      setDragging(false);
       return;
     }
     // 拖的是格子条：往右拖看到更早的周，往左拖回到更新的周
@@ -280,14 +334,27 @@ export function CalendarView({ data, error, onRetry, mode, hidden }: CalendarVie
           <div className="cal-head">
             <span className="cal-range">{rangeText}</span>
             <span className="cal-legend">
-              <span className="legend-item">
-                <span className="sw" style={{ background: 'var(--green)' }} aria-hidden="true" />
-                {t('calendar.add')}
-              </span>
-              <span className="legend-item">
-                <span className="sw" style={{ background: 'var(--red)' }} aria-hidden="true" />
-                {t('calendar.del')}
-              </span>
+              {metrics.map((metric) => {
+                const on = shown[metric.id];
+                return (
+                  <button
+                    type="button"
+                    data-metric={metric.id}
+                    key={metric.id}
+                    className={`legend-item${on ? '' : ' off'}`}
+                    title={on ? t('calendar.legendOn') : t('calendar.legendOff')}
+                    aria-pressed={on}
+                    onClick={() => setShown((prev) => ({ ...prev, [metric.id]: !prev[metric.id] }))}
+                  >
+                    <span
+                      className="sw"
+                      aria-hidden="true"
+                      style={on ? { background: metric.color } : { boxShadow: `inset 0 0 0 2px ${metric.color}` }}
+                    />
+                    {metric.label}
+                  </button>
+                );
+              })}
             </span>
           </div>
           <div className="calendar-wrap">
@@ -363,8 +430,17 @@ export function CalendarView({ data, error, onRetry, mode, hidden }: CalendarVie
                           onKeyDown={(event) => onCellKey(event, date)}
                           onClick={() => setPinned((prev) => (prev === date ? undefined : date))}
                         >
-                          <span className="hbar add" style={{ width: barW(stat.add) }} />
-                          <span className="hbar del" style={{ width: barW(stat.del) }} />
+                          {single ? (
+                            <span
+                              className={`hfill ${single}`}
+                              style={{ opacity: fillOpacity(stat[single], peaks[single]) }}
+                            />
+                          ) : shown.add ? (
+                            <>
+                              <span className="hbar add" style={{ width: barW(stat.add) }} />
+                              <span className="hbar del" style={{ width: barW(stat.del) }} />
+                            </>
+                          ) : null}
                         </button>
                       );
                     })}

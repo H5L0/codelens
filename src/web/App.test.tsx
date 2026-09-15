@@ -107,9 +107,9 @@ const drag = async (selector: string, fromX: number, toX: number): Promise<void>
     throw new Error(`找不到元素 ${selector}`);
   }
   await act(async () => {
-    target.dispatchEvent(new MouseEvent('pointerdown', { clientX: fromX, bubbles: true }));
-    target.dispatchEvent(new MouseEvent('pointermove', { clientX: toX, bubbles: true }));
-    target.dispatchEvent(new MouseEvent('pointerup', { clientX: toX, bubbles: true }));
+    target.dispatchEvent(new MouseEvent('pointerdown', { clientX: fromX, buttons: 1, bubbles: true }));
+    target.dispatchEvent(new MouseEvent('pointermove', { clientX: toX, buttons: 1, bubbles: true }));
+    target.dispatchEvent(new MouseEvent('pointerup', { clientX: toX, buttons: 0, bubbles: true }));
   });
 };
 /** 给元素一个假的位置（happy-dom 里 getBoundingClientRect 全是 0），动画起点靠它算出来。 */
@@ -207,6 +207,40 @@ describe('App', () => {
     const day = container.querySelector('.grid .cell[data-date="2026-01-05"]');
     expect(day?.querySelector('.hbar.add')?.getAttribute('style')).toContain('36px');
     expect(day?.querySelector('.hbar.del')?.getAttribute('style')).toContain('15px');
+  });
+
+  test('[App] 图例可以点掉一条色带，只留一条时格子改成整格铺色', async () => {
+    await mount();
+    const day = (): Element | null => container.querySelector('.grid .cell[data-date="2026-01-05"]');
+    const item = (metric: string): Element | null => container.querySelector(`.cal-legend .legend-item[data-metric="${metric}"]`);
+    const bars = (): number => day()?.querySelectorAll('.hbar').length ?? 0;
+    const fill = (selector = '.hfill'): string =>
+      (day()?.querySelector(selector) as HTMLElement | null)?.style.opacity ?? 'none';
+    // 两条都在：一格两根色带，不铺色
+    expect(bars()).toBe(2);
+    expect(day()?.querySelector('.hfill')).toBeNull();
+    expect(item('add')?.getAttribute('aria-pressed')).toBe('true');
+    // 点掉删除行：改成整格绿色填充；1 月 5 日新增 30 行，正好是该指标的峰值，铺满
+    await click('.cal-legend .legend-item[data-metric="del"]');
+    expect(bars()).toBe(0);
+    expect(fill('.hfill.add')).toBe('1');
+    expect(item('del')?.getAttribute('aria-pressed')).toBe('false');
+    expect(item('del')?.classList.contains('off')).toBe(true);
+    // 区间外的格子没有改动，填充全透明，只剩底色
+    const out = container.querySelector('.grid .cell[data-date="2025-08-25"]');
+    expect((out?.querySelector('.hfill.add') as HTMLElement | null)?.style.opacity).toBe('0');
+    // 点回来恢复两根色带，再点掉新增行就只剩红色填充
+    await click('.cal-legend .legend-item[data-metric="del"]');
+    expect(bars()).toBe(2);
+    await click('.cal-legend .legend-item[data-metric="add"]');
+    expect(day()?.querySelectorAll('.hfill.del')).toHaveLength(1);
+    // 两条都点掉：格子既不画色带也不铺色
+    await click('.cal-legend .legend-item[data-metric="del"]');
+    expect(day()?.querySelectorAll('.hbar, .hfill')).toHaveLength(0);
+    // 再点回两条，恢复原来的画法
+    await click('.cal-legend .legend-item[data-metric="add"]');
+    await click('.cal-legend .legend-item[data-metric="del"]');
+    expect(bars()).toBe(2);
   });
 
   test('[App] 日历左侧列出周一到周日七天', async () => {
@@ -519,6 +553,61 @@ describe('App', () => {
     expect(text('.cal-range')).toBe('2025年7月28日 ~ 2025年12月28日');
     expect(all('.grid .cell')[0].getAttribute('data-date')).toBe('2025-07-28');
     expect(frame.style.left).toBe(`${53 * 7 - 2}px`);
+  });
+
+  test('[App] 松手丢了或松在条外，窗口都不该继续跟着指针动', async () => {
+    const long: CalendarData = {
+      ...calendar,
+      range: { min: '2025-06-16', max: '2026-01-06' },
+      days: { ...calendar.days, '2025-06-16': calendar.days['2026-01-05'] },
+    };
+    vi.stubGlobal('fetch', async (url: string) => ({
+      ok: true,
+      status: 200,
+      json: async () => (url.includes('loc') ? loc : long),
+    }));
+    await mount();
+    const track = (): Element => {
+      const el = container.querySelector('.scrub-track');
+      if (!el) {
+        throw new Error('找不到拖动条');
+      }
+      return el;
+    };
+    const dragging = (): boolean => container.querySelector('.scrub')?.classList.contains('dragging') ?? false;
+    // pointerup 整个丢失：松开之后的移动只收尾，不再平移窗口
+    await act(async () => {
+      track().dispatchEvent(new MouseEvent('pointerdown', { clientX: 172, buttons: 1, bubbles: true }));
+      track().dispatchEvent(new MouseEvent('pointermove', { clientX: 200, buttons: 1, bubbles: true }));
+    });
+    expect(text('.cal-range')).toBe('2025年7月28日 ~ 2025年12月28日');
+    expect(dragging()).toBe(true);
+    await act(async () => {
+      track().dispatchEvent(new MouseEvent('pointermove', { clientX: 260, buttons: 0, bubbles: true }));
+    });
+    expect(text('.cal-range')).toBe('2025年7月28日 ~ 2025年12月28日');
+    expect(dragging()).toBe(false);
+    // 松手落在条外：条收不到 pointerup，兜底监听也要收尾
+    await act(async () => {
+      track().dispatchEvent(new MouseEvent('pointerdown', { clientX: 172, buttons: 1, bubbles: true }));
+      track().dispatchEvent(new MouseEvent('pointermove', { clientX: 200, buttons: 1, bubbles: true }));
+    });
+    await act(async () => {
+      container.dispatchEvent(new MouseEvent('pointerup', { clientX: 200, buttons: 0, bubbles: true }));
+    });
+    expect(dragging()).toBe(false);
+    const settled = text('.cal-range');
+    expect(settled).toBe('2025年6月30日 ~ 2025年11月30日');
+    // 指针只是扫过条：窗口必须停住（修好之前这里会继续平移）
+    await act(async () => {
+      track().dispatchEvent(new MouseEvent('pointermove', { clientX: 320, buttons: 0, bubbles: true }));
+    });
+    expect(text('.cal-range')).toBe(settled);
+    // 右键按下不该开始拖动
+    await act(async () => {
+      track().dispatchEvent(new MouseEvent('pointerdown', { clientX: 200, button: 2, buttons: 2, bubbles: true }));
+    });
+    expect(dragging()).toBe(false);
   });
 
   test('[App] 数据读取失败时应该给出可读的提示与重试', async () => {
